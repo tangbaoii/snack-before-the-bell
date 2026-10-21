@@ -2,8 +2,11 @@
 
 **One line:** You skipped breakfast. Eat every snack on your desk before the bell rings, and don't let the teacher catch you.
 
+## ▶ Play now
+**https://tangbaoii.github.io/snack-before-the-bell/**
+
 ## Running it
-Open `index.html` in Chrome or Edge. It needs an internet connection to load three.js. All models are built in code and all sounds are generated in the browser, so there are no asset files.
+Open `index.html` in Chrome or Edge (needs internet to load three.js), or use `SnackBeforeTheBell.html`, a single file that works offline. All models are built in code and all sounds are generated in the browser, so there are no asset files.
 
 ## Controls
 | Key | Action |
