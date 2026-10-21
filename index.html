@@ -61,6 +61,8 @@
   #teacherBox { min-width:190px; text-align:center; font-size:13px; transition:background .15s; }
   #teacherBox b { display:block; font-size:17px; }
   #teacherBox.warn { background:#ffd84d !important; animation:blink .25s infinite alternate; }
+  #teacherBox.safe { background:#bfe3ff !important; }
+  #alert.announce div { background:#4aa3ff; font-size:28px; animation:none; }
   #teacherBox.look { background:var(--bad) !important; color:#fff; }
   @keyframes blink { to { transform:scale(1.06); } }
   #alert { position:fixed; left:0; right:0; top:92px; display:none; text-align:center; pointer-events:none; }
@@ -147,11 +149,11 @@ import * as THREE from 'three';
    配置：关卡与食物（仿 sneakyschool 的 JSON 关卡数据，改数值即可调难度）
    ============================================================ */
 const LEVELS = [
-  { subj:'Math',       board:'Chapter 3   Quadratic Equations   ax² + bx + c = 0', time:90, turnEvery:[5,9],   watch:[1.6,2.8], warn:1.1, turnTime:1.0,  fake:0,   items:['bun','jelly','onigiri','sandwich','yakisoba'] },
-  { subj:'Literature', board:'"Spring Morning"   —   memorize it by Friday!',        time:90, turnEvery:[4.5,8], watch:[1.6,3.0], warn:1.0, turnTime:0.85, fake:.2,  items:['bun','jelly','onigiri','sandwich','yakisoba','chicken'] },
-  { subj:'English',    board:'Unit 5   What did you eat for breakfast?',              time:90, turnEvery:[4,7.5], watch:[1.7,3.0], warn:0.9, turnTime:0.7,   fake:.25, items:['jelly','onigiri','sandwich','yakisoba','chicken','tea','bun'] },
-  { subj:'Physics',    board:"Newton's Second Law   F = m a",                         time:85, turnEvery:[3.5,7], watch:[1.8,3.2], warn:0.8, turnTime:0.55, fake:.3,  items:['bun','jelly','onigiri','onigiri','sandwich','yakisoba','chicken','tea'] },
-  { subj:'History',    board:'FINAL EXAM REVIEW   ※ Everything is important ※',      time:85, turnEvery:[3,6],   watch:[2.0,3.4], warn:0.7, turnTime:0.45,  fake:.35, items:['bun','jelly','jelly','onigiri','sandwich','yakisoba','chicken','tea','tea'] },
+  { subj:'Math',       board:'Chapter 3   Quadratic Equations   ax² + bx + c = 0', time:90, turnEvery:[5,9],   watch:[1.6,2.8], warn:1.1, turnTime:1.0,  fake:0,   drink:.12, thief:0,   events:0,   tip:'', items:['bun','jelly','onigiri','sandwich','yakisoba'] },
+  { subj:'Literature', board:'"Spring Morning"   —   memorize it by Friday!',        time:90, turnEvery:[4.5,8], watch:[1.6,3.0], warn:1.0, turnTime:0.85, fake:.2,  drink:.15, thief:0,   events:0,   tip:'🥤 New: sometimes he turns sideways to sip water. That is NOT a turn!', items:['bun','jelly','onigiri','sandwich','yakisoba','chicken'] },
+  { subj:'English',    board:'Unit 5   What did you eat for breakfast?',              time:90, turnEvery:[4,7.5], watch:[1.7,3.0], warn:0.9, turnTime:0.7,   fake:.25, drink:.15, thief:.4,  events:0,   tip:'😋 New: stop mid-snack too long and your deskmate will steal it', items:['jelly','onigiri','sandwich','yakisoba','chicken','tea','bun'] },
+  { subj:'Physics',    board:"Newton's Second Law   F = m a",                         time:85, turnEvery:[3.5,7], watch:[1.8,3.2], warn:0.8, turnTime:0.55, fake:.3,  drink:.15, thief:.5,  events:.15, tip:'📢💥 New: surprise events: PA announcements and loud crashes', items:['bun','jelly','onigiri','onigiri','sandwich','yakisoba','chicken','tea'] },
+  { subj:'History',    board:'FINAL EXAM REVIEW   ※ Everything is important ※',      time:85, turnEvery:[3,6],   watch:[2.0,3.4], warn:0.7, turnTime:0.45,  fake:.35, drink:.15, thief:.6,  events:.2,  tip:'Final exam review. Everything at once. Good luck!', items:['bun','jelly','jelly','onigiri','sandwich','yakisoba','chicken','tea','tea'] },
 ];
 const FOODS = {
   bun:      { name:'Bun',            pts:10,  len:4,  color:'#d89a4e' },
@@ -224,6 +226,11 @@ const sfx = {
   turn() { noise(.3, { freq: 400, slide: 2500, q: .8, gain: .35 }); tone(392, .18, { type: 'square', gain: .16, at: .05 }); tone(311, .35, { type: 'square', gain: .16, at: .22 }); },
   warnBeep() { tone(880, .09, { type: 'square', gain: .1 }); tone(880, .09, { type: 'square', gain: .1, at: .16 }); },
   ahem() { tone(150, .14, { type: 'sawtooth', gain: .12, slide: 30 }); noise(.12, { freq: 500, q: 1, gain: .22, at: .18 }); },
+  gulp() { [0, .3, .6].forEach(a => { tone(260, .1, { slide: -120, gain: .25, at: a }); noise(.06, { freq: 400, gain: .15, at: a + .04 }); }); },
+  pa() { tone(659, .5, { gain: .2 }); tone(523, .7, { gain: .2, at: .45 }); for (let i = 0; i < 9; i++) noise(rand(.12, .25), { type: 'lowpass', freq: 600, q: 4, gain: .14, at: 1.1 + i * .24 }); },
+  crash() { noise(.45, { freq: 2200, q: .4, gain: .6 }); [1800, 2600, 3300, 1500].forEach((f, i) => tone(f, .12, { type: 'square', gain: .05, at: .02 + i * .05 })); },
+  sneak() { tone(330, .18, { type: 'triangle', gain: .12, slide: 160 }); tone(495, .18, { type: 'triangle', gain: .1, at: .14 }); },
+  snatch() { noise(.15, { freq: 1500, slide: 1500, gain: .35 }); },
   gasp() { noise(.5, { freq: 900, q: .7, gain: .25, slide: 500 }); },
 };
 
@@ -310,6 +317,8 @@ const cTex = new THREE.CanvasTexture(clockCanvas); cTex.colorSpace = THREE.SRGBC
 mesh(new THREE.CircleGeometry(.35, 24), new THREE.MeshBasicMaterial({ map: cTex }), clock, 0, 0, .035);
 function hand(len, w, color, z) { const p = new THREE.Group(); p.position.z = z; clock.add(p); box(w, len, .01, color, p, 0, len / 2 - .04, 0); return p; }
 const hHour = hand(.2, .03, '#222', .045), hMin = hand(.3, .02, '#222', .05), hSec = hand(.31, .008, '#e5484d', .055);
+// 广播喇叭
+box(.55, .34, .12, '#3a3d44', room, -3.7, 2.95, RZF + .1); for (let i = 0; i < 4; i++) box(.45, .02, .01, '#777', room, -3.7, 2.86 + i * .06, RZF + .165);
 // 日光灯
 for (const x of [-3, 0, 3]) for (const z of [-5, -1.5, 2]) { box(.3, .06, 1.6, '#cfcfcf', room, x, RH - .05, z); mesh(boxGeo(.2, .03, 1.5), new THREE.MeshBasicMaterial({ color: '#ffffff' }), room, x, RH - .09, z); }
 // 讲台
@@ -391,6 +400,7 @@ function updateStudents(dt, t) {
     else if (s.action === 'write') { tp = .45; wr = 1.05 + Math.sin(t * 9 + s.phase) * .12; }
     else if (s.action === 'peek') { ty = THREE.MathUtils.clamp(s.toPlayer, -1.3, 1.3); tp = .1; }
     else if (s.action === 'sleep') { tp = .9; lean = .45; wr = wl = 1.45; }
+    if (s.lookUp > 0) { s.lookUp -= dt; ty = 0; tp = -.45; lean = 0; }
     if (s.nervous > 0) { s.nervous -= dt; ty = THREE.MathUtils.clamp(s.toPlayer, -2.6, 2.6); tp = -.05; lean = 0; }
     s.sweat.visible = s.nervous > 0;
     const k = s.nervous > 0 ? 12 : 3;
@@ -456,7 +466,8 @@ function makeTeacher() {
   const mark = emojiSprite('❗', .35); mark.position.set(0, .78, 0); mark.visible = false; head.add(mark);
   const qmark = emojiSprite('❓', .32); qmark.position.set(0, .78, 0); qmark.visible = false; head.add(qmark);
   const look = emojiSprite('👀', .4); look.position.set(0, .8, 0); look.visible = false; head.add(look);
-  return { g, body, head, arms, eyes, brows, mouth, mark, qmark, look };
+  const cup = mesh(new THREE.CylinderGeometry(.05, .042, .12, 10), '#dff1ff', arms[0], 0, -.42, .05); cup.visible = false;
+  return { g, body, head, arms, eyes, brows, mouth, mark, qmark, look, cup };
 }
 const teacher = makeTeacher();
 const T = { state: 'board', t: 6, rot: Math.PI, chalkT: 0, hintAt: 1, hinted: false, nearCounted: false, stepT: 0, lookPhase: 0 };
@@ -539,6 +550,41 @@ function makeHand(side) {
   room.add(g); return g;
 }
 const hands = { L: makeHand(-1), R: makeHand(1) };
+// 后期关卡：同桌偷吃。你停嘴太久他就伸手；继续吃他会缩回去
+const thiefHand = makeHand(1); thiefHand.rotation.y = 1.3; thiefHand.visible = false;
+const thiefEmo = emojiSprite('😋', .12); thiefEmo.position.set(0, .1, .06); thiefHand.add(thiefEmo);
+const THIEF_REST = new THREE.Vector3(1.0, .95, 3.25), thiefTgt = new THREE.Vector3();
+function updateThief(dt) {
+  const TH = G.thief; if (!G.lv.thief) return;
+  if (TH.state === 'idle') {
+    TH.cd -= dt;
+    const locked = G.slots.findIndex(x => x && x.state === 'ready' && x.prog > 0);
+    if (TH.cd <= 0 && locked >= 0 && G.idle > 2.2) {
+      if (Math.random() < G.lv.thief) { Object.assign(TH, { state: 'reach', t: 1.6, slot: locked, prog: G.slots[locked].prog }); thiefHand.position.copy(THIEF_REST); thiefHand.visible = true; sfx.sneak(); toast('😋 Your deskmate is eyeing your snack… keep eating!', 1400); }
+      else TH.cd = 4;
+    }
+    return;
+  }
+  const sl = G.slots[TH.slot], fx = SLOT_X[TH.slot];
+  if (TH.state === 'reach') {
+    TH.t -= dt; thiefTgt.set(fx + .2, .93 + Math.sin(elapsed * 8) * .012, 2.95); thiefHand.position.lerp(thiefTgt, 1 - Math.exp(-4 * dt));
+    if (!sl || sl.state !== 'ready' || sl.prog !== TH.prog) { TH.state = 'retreat'; if (sl && sl.prog > TH.prog) toast('Hands off! He backed away 😤', 900); }
+    else if (TH.t <= 0) { TH.state = 'grab'; TH.t = .25; }
+  } else if (TH.state === 'grab') {
+    TH.t -= dt; thiefTgt.set(fx, DESK_Y + .08, SLOT_Z); thiefHand.position.lerp(thiefTgt, 1 - Math.exp(-18 * dt));
+    if (TH.t <= 0) {
+      thiefHand.attach(sl.root); sl.state = 'stolen'; sl.dirty = true; TH.food = sl; TH.state = 'escape'; G.stolen++; sfx.snatch();
+      floatText(new THREE.Vector3(fx, DESK_Y + .3, SLOT_Z), 'Stolen!', 'bad');
+      toast(`😋 Your deskmate stole your half-eaten ${sl.def.name}! A fresh one goes back in your bag.`, 2200);
+    }
+  } else {
+    thiefHand.position.lerp(THIEF_REST, 1 - Math.exp(-6 * dt));
+    if (thiefHand.position.distanceTo(THIEF_REST) < .05) {
+      if (TH.food) { thiefHand.remove(TH.food.root); TH.food.state = 'empty'; G.bag.push(TH.food.type); G.respawn[TH.slot] = .3; TH.food = null; }
+      thiefHand.visible = false; TH.state = 'idle'; TH.cd = rand(12, 18);
+    }
+  }
+}
 const HAND_REST = { L: new THREE.Vector3(-.36, .79, 3.17), R: new THREE.Vector3(.36, .79, 3.17) };
 const MOUTH = new THREE.Vector3(0, 1.08, 3.42);
 const handAnim = { t: 1, from: new THREE.Vector3(), food: new THREE.Vector3() };
@@ -587,16 +633,16 @@ function placeFood(i, type) {
   f.root.traverse(o => o.userData.slot = i);
   G.slots[i] = { type, def, seq: newSeq(def.len), prog: 0, ...f, state: 'ready', pop: 0, dirty: true };
 }
-function clearSlots() { if (G) G.slots.forEach(s => s && s.root && room.remove(s.root)); }
+function clearSlots() { if (G) { G.slots.forEach(s => s && s.root && room.remove(s.root)); if (G.thief && G.thief.food) thiefHand.remove(G.thief.food.root); } thiefHand.visible = false; }
 
 function startLevel(li) {
   ensureAudio(); clearSlots();
   const lv = LEVELS[li];
-  G = { li, lv, state: 'intro', introT: 3.2, timeLeft: lv.time, score: 0, wrong: 0, near: 0, eaten: 0, sel: 0, lockT: 0, slots: SLOT_X.map(() => null), endT: 0,
+  G = { li, lv, state: 'intro', introT: 3.2, timeLeft: lv.time, score: 0, wrong: 0, near: 0, eaten: 0, sel: 0, lockT: 0, slots: SLOT_X.map(() => null), endT: 0, idle: 0, stolen: 0, thief: { state: 'idle', cd: rand(10, 16) },
         total: lv.items.length, bag: [...lv.items].sort(() => Math.random() - .5), respawn: SLOT_X.map(() => 0) };
   SLOT_X.forEach((x, i) => { if (G.bag.length) placeFood(i, G.bag.pop()); });
   spawnStudents(); resetBoard(lv);
-  Object.assign(T, { state: 'board', t: rand(...lv.turnEvery) + 1.5, rot: Math.PI, hinted: false, nearCounted: false, fake: false, uiMode: null });
+  Object.assign(T, { state: 'board', t: rand(...lv.turnEvery) + 1.5, rot: Math.PI, hinted: false, nearCounted: false, fake: false, uiMode: null, nextWatch: 0, watchKind: 'normal', gulped: false });
   T.hintAt = rand(.6, 1.4);
   teacher.mark.visible = false; teacher.brows.forEach(b => b.rotation.z = 0); teacher.mouth.rotation.z = Math.PI; teacher.mouth.position.y = .135;
   camState.mode = 'seat'; camera.position.copy(CAM_POS); camera.lookAt(CAM_LOOK);
@@ -604,7 +650,7 @@ function startLevel(li) {
   $('#bubble').style.display = 'none'; $('#lock').style.display = 'none';
   $('#hTarget').textContent = G.total; $('#alert').style.display = 'none';
   $('#hLvl').textContent = `Class ${li + 1}`; $('#hSubj').textContent = lv.subj;
-  showBig(`Class ${li + 1} · ${lv.subj}<small>Eat all ${G.total} snacks in ${lv.time} seconds!</small>`);
+  showBig(`Class ${li + 1} · ${lv.subj}<small>Eat all ${G.total} snacks in ${lv.time} seconds!</small>${lv.tip ? `<small style="font-size:18px;margin-top:10px">${lv.tip}</small>` : ''}`);
   paused = false;
 }
 function showBig(html) { const b = $('#big'); b.innerHTML = html; b.style.display = html ? 'flex' : 'none'; }
@@ -630,6 +676,7 @@ function onAction(code) {
   const letter = { KeyW: 'W', KeyA: 'A', KeyS: 'S', KeyD: 'D' }[code];
   if (!letter || !cur || cur.state !== 'ready') return;
   if (letter === cur.seq[cur.prog]) {
+    G.idle = 0;
     cur.prog++; cur.dirty = true; cur.setP(cur.prog / cur.seq.length);
     sfx.bite(); camState.bob = 1;
     handAnim.t = 0; handAnim.food.set(SLOT_X[G.sel], DESK_Y + .1, SLOT_Z);
@@ -708,7 +755,7 @@ function showResult(kind) {
   if (!G) return;
   G.state = kind === 'win' ? 'ending' : 'result'; $('#bubble').style.display = 'none'; seqPanel.style.display = 'none'; $('#alert').style.display = 'none';
   const lv = G.lv, n = G.total, li = G.li; let html;
-  const stats = `<table class="res"><tr><td>Snacks eaten</td><td>${G.eaten} / ${n}</td></tr><tr><td>Points</td><td>${G.score}</td></tr><tr><td>Time left</td><td>${Math.ceil(G.timeLeft)} s</td></tr><tr><td>Spits</td><td>${G.wrong}</td></tr><tr><td>Close calls</td><td>${G.near}</td></tr></table>`;
+  const stats = `<table class="res"><tr><td>Snacks eaten</td><td>${G.eaten} / ${n}</td></tr><tr><td>Points</td><td>${G.score}</td></tr><tr><td>Time left</td><td>${Math.ceil(G.timeLeft)} s</td></tr><tr><td>Spits</td><td>${G.wrong}</td></tr><tr><td>Close calls</td><td>${G.near}</td></tr>${G.stolen ? `<tr><td>Stolen by deskmate</td><td>${G.stolen}</td></tr>` : ''}</table>`;
   if (kind === 'win') {
     const st = starsFor(G.timeLeft, lv.time); sfx.win();
     save.stars[li] = Math.max(save.stars[li] || 0, st); save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, li + 2)); store.set(save);
@@ -762,7 +809,9 @@ function showMenu() {
       🍙 Switch snacks with <span class="key">←</span> <span class="key">→</span>, <span class="key">Q</span> <span class="key">E</span>, or a mouse click.<br>
       ⌨️ Type the <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> sequence above a snack. The first correct key locks you onto it.<br>
       🤢 Wrong key = you spit it out: progress resets and you're stuck for a moment.<br>
-      👀 When the teacher faces the class, <b>ANY key</b> gets you caught. Warning signs: the chalk stops, footsteps, he glances over his shoulder, and a ❓ appears. Later classes have <b>fake-outs</b>!<br>
+      👀 When the teacher faces the class, <b>ANY key</b> gets you caught. Warning signs: the chalk stops, footsteps, he glances over his shoulder, and a ❓ appears. Later classes have <b>fake-outs</b>: he may stop and go back to writing, or just turn sideways to sip water 🥤.<br>
+      😋 From Class 3, stop mid-snack too long and your deskmate reaches over to steal it. Keep eating to scare him off.<br>
+      📢💥 Classes 4–5: surprise PA announcements (safe!) and loud crashes (he turns fast!).<br>
       🎒 Eat every snack (refills come from your bag) before the bell. Finish faster for more stars.<br>
       <small>Bun 4 · Energy Jelly 5 · Onigiri 6 · Sandwich 8 · Noodle Hot Dog 9 · Fried Chicken 10 · Bubble Tea 12 keys　|　Esc to pause</small>
     </div>
@@ -789,7 +838,7 @@ function update(dt) {
     if (G.introT <= 0) { G.state = 'playing'; showBig(''); }
   }
   if (G && st === 'playing') {
-    G.timeLeft -= dt;
+    G.timeLeft -= dt; G.idle += dt; updateThief(dt);
     if (G.lockT > 0) { G.lockT -= dt; if (G.lockT <= 0) { G.lockT = 0; $('#lock').style.display = 'none'; } }
     if (G.timeLeft <= 0) { G.timeLeft = 0; bell(); }
   }
@@ -802,6 +851,25 @@ function update(dt) {
   updateClock();
   updateHUD();
 }
+// 老师的节奏：注视时长有短有长，长注视后多给一点空档
+function pickWatch() {
+  if (T.nextWatch) { const w = T.nextWatch; T.nextWatch = 0; T.watchKind = 'short'; return w; }
+  const [a, b] = G.lv.watch, r = Math.random();
+  if (r < .3) { T.watchKind = 'short'; return rand(.8, 1.2); }
+  if (r > .8) { T.watchKind = 'long'; return rand(b + .4, b + 1.3); }
+  T.watchKind = 'normal'; return rand(a, b);
+}
+function nextGap() { return Math.max(2.5, rand(...G.lv.turnEvery) + (T.watchKind === 'long' ? 1.5 : T.watchKind === 'short' ? -.8 : 0)); }
+function resumeBoard(t) { T.state = 'board'; T.t = t; T.hinted = false; T.nearCounted = false; T.hintAt = rand(.6, 1.4); }
+function startWarning(fake, warn) { T.state = 'warning'; T.t = warn || G.lv.warn; T.fake = fake; sfx.step(); sfx.step(.25); sfx.warnBeep(); if (Math.random() < .5) sfx.ahem(); }
+function nextMove() {
+  const lv = G.lv, r = Math.random(), ev = lv.events || 0, dr = lv.drink || 0;
+  if (r < ev) {
+    if (Math.random() < .5) { T.state = 'announce'; T.t = 3.4; sfx.pa(); students.forEach(st => st.lookUp = 3.2); }
+    else { sfx.crash(); camState.shake = .3; toast('💥 CRASH! Someone dropped a pencil case!', 1400); nervousGlance(); T.nextWatch = rand(1, 1.5); startWarning(false, .55); }
+  } else if (r < ev + dr) { T.state = 'drink'; T.t = T.drinkDur = 2.6; T.gulped = false; }
+  else startWarning(Math.random() < (lv.fake || 0));
+}
 function updateTeacher(dt) {
   const tg = teacher; const playing = G && G.state === 'playing';
   const writing = T.state === 'board';
@@ -809,7 +877,7 @@ function updateTeacher(dt) {
     if (playing) {
       T.t -= dt;
       if (!T.hinted && T.t < T.hintAt) { T.hinted = true; if (Math.random() < .6) nervousGlance(); }
-      if (T.t <= 0) { T.state = 'warning'; T.t = G.lv.warn; T.fake = Math.random() < (G.lv.fake || 0); sfx.step(); sfx.step(.25); sfx.warnBeep(); if (Math.random() < .5) sfx.ahem(); }
+      if (T.t <= 0) nextMove();
     }
     if (Math.random() < dt * .08 && playing) nervousGlance(); // 偶尔的虚惊
   } else if (T.state === 'warning') {
@@ -819,17 +887,23 @@ function updateTeacher(dt) {
       else { T.state = 'turning'; T.turnDur = T.t = G.lv.turnTime; T.turnFrom = T.rot; T.turnP = 0; sfx.turn(); camState.shake = .25; }
     }
   } else if (T.state === 'fakeout') {
-    T.t -= dt; if (T.t <= 0) { T.state = 'board'; T.t = rand(...G.lv.turnEvery) * .6; T.hinted = false; T.nearCounted = false; T.hintAt = rand(.6, 1.4); }
+    T.t -= dt; if (T.t <= 0) resumeBoard(rand(...G.lv.turnEvery) * .6);
+  } else if (T.state === 'drink') {
+    T.t -= dt; if (!T.gulped && T.t < T.drinkDur * .6) { T.gulped = true; sfx.gulp(); }
+    if (T.t <= 0) resumeBoard(rand(...G.lv.turnEvery) * .7);
+  } else if (T.state === 'announce') {
+    T.t -= dt; if (T.t <= 0) resumeBoard(rand(...G.lv.turnEvery) * .6);
   } else if (T.state === 'turning') {
-    T.t -= dt; if (T.t <= 0) { T.state = 'watching'; T.t = rand(...G.lv.watch); }
+    T.t -= dt; if (T.t <= 0) { T.state = 'watching'; T.t = pickWatch(); }
   } else if (T.state === 'watching') {
     T.t -= dt; if (T.t <= 0) { T.state = 'back'; T.t = .35; }
   } else if (T.state === 'back') {
-    T.t -= dt; if (T.t <= 0) { T.state = 'board'; T.t = rand(...G.lv.turnEvery); T.hinted = false; T.nearCounted = false; T.hintAt = rand(.6, 1.4); }
+    T.t -= dt; if (T.t <= 0) resumeBoard(nextGap());
   }
+  const drinkP = T.state === 'drink' ? 1 - T.t / T.drinkDur : 0, cupUp = drinkP > .15 && drinkP < .82;
   // 朝向：π = 面向黑板，0 = 面向学生
   const facing = ['turning', 'watching', 'caught', 'ending'].includes(T.state) || (G && G.state === 'bell');
-  const goal = facing ? 0 : T.state === 'warning' ? Math.PI - .6 : Math.PI;
+  const goal = facing ? 0 : T.state === 'warning' ? Math.PI - .6 : (T.state === 'drink' && drinkP < .85) ? Math.PI - 1.35 : Math.PI;
   const k = T.state === 'turning' ? 22 : T.state === 'back' ? 12 : T.state === 'warning' ? 9 : 6;
   if (T.state === 'turning') { T.turnP = 1 - Math.max(0, T.t) / T.turnDur; T.rot = lerp(T.turnFrom, 0, ease(T.turnP)); }
   else T.rot = damp(T.rot, goal, k, dt);
@@ -837,13 +911,19 @@ function updateTeacher(dt) {
   tg.g.scale.setScalar(damp(tg.g.scale.x, (facing && T.state !== 'ending' ? 1.15 : 1) * TS, 8, dt));
   tg.g.position.z = damp(tg.g.position.z, RZF + (facing ? 1.25 : .8), 6, dt);
   // 写字手臂
-  const armR = tg.arms[1], armL = tg.arms[0];
+  const armR = tg.arms[1], armL = tg.arms[0]; let headTilt = 0;
   if (writing && G && G.state !== 'menu') {
     armR.rotation.x = damp(armR.rotation.x, -2.1 + Math.sin(elapsed * 7) * .15, 10, dt); armR.rotation.z = Math.sin(elapsed * 3.3) * .25;
     T.chalkT -= dt; if (T.chalkT <= 0) { T.chalkT = rand(.08, .22); if (G.state === 'playing' || G.state === 'intro') { sfx.chalk(); chalkStroke(); } }
     tg.head.rotation.y = damp(tg.head.rotation.y, Math.sin(elapsed * .7) * .15, 3, dt);
   } else if (T.state === 'warning') {
     armR.rotation.x = damp(armR.rotation.x, -.5, 9, dt); armR.rotation.z = damp(armR.rotation.z, 0, 9, dt); tg.head.rotation.y = damp(tg.head.rotation.y, 1.1, 9, dt);
+  } else if (T.state === 'drink') {
+    armR.rotation.x = damp(armR.rotation.x, -.2, 6, dt); armR.rotation.z = damp(armR.rotation.z, 0, 6, dt);
+    armL.rotation.x = damp(armL.rotation.x, cupUp ? -2.4 : 0, 6, dt); armL.rotation.z = damp(armL.rotation.z, cupUp ? .45 : 0, 6, dt);
+    tg.head.rotation.y = damp(tg.head.rotation.y, 0, 6, dt); headTilt = cupUp && drinkP > .3 ? -.45 : 0;
+  } else if (T.state === 'announce') {
+    armR.rotation.x = damp(armR.rotation.x, -.3, 6, dt); tg.head.rotation.y = damp(tg.head.rotation.y, -.7, 5, dt); headTilt = -.35;
   } else if (T.state === 'fakeout') {
     armR.rotation.x = damp(armR.rotation.x, -2.0, 8, dt); tg.head.rotation.y = damp(tg.head.rotation.y, 0, 8, dt);
   } else if (T.state === 'caught') {
@@ -853,18 +933,21 @@ function updateTeacher(dt) {
     armL.rotation.z = damp(armL.rotation.z, -.3, 8, dt);
     tg.head.rotation.y = T.state === 'watching' ? Math.sin(elapsed * 2.2) * .35 : damp(tg.head.rotation.y, 0, 6, dt);
   } else { armR.rotation.x = damp(armR.rotation.x, 0, 6, dt); }
-  if (!facing) armL.rotation.z = damp(armL.rotation.z, 0, 6, dt);
+  if (!facing && T.state !== 'drink') armL.rotation.z = damp(armL.rotation.z, 0, 6, dt);
+  if (T.state !== 'drink') armL.rotation.x = damp(armL.rotation.x, 0, 6, dt);
+  tg.head.rotation.x = damp(tg.head.rotation.x, headTilt, 6, dt); tg.cup.visible = T.state === 'drink' && drinkP > .08 && drinkP < .9;
   const looking = G && (teacherWatching() || T.state === 'caught'), warnOn = G && G.state === 'playing' && (T.state === 'warning' || (T.state === 'turning' && !teacherWatching()));
   const vg = $('#vignette'); vg.style.opacity = looking ? 1 : 0; vg.classList.toggle('look', !!looking && T.state !== 'caught');
   tg.qmark.visible = !!warnOn; tg.look.visible = !!(G && G.state === 'playing' && teacherWatching());
   if (tg.qmark.visible) tg.qmark.scale.setScalar(.4 + Math.sin(elapsed * 25) * .06);
   if (tg.look.visible) tg.look.scale.setScalar(.5 + Math.sin(elapsed * 14) * .08);
-  const mode = !G || G.state !== 'playing' ? '' : teacherWatching() ? 'look' : warnOn ? 'warn' : '';
+  const mode = !G || G.state !== 'playing' ? '' : teacherWatching() ? 'look' : warnOn ? 'warn' : T.state === 'announce' ? 'announce' : (T.state === 'drink' && drinkP > .2) ? 'drink' : '';
   if (T.uiMode !== mode) {
     T.uiMode = mode; const box = $('#teacherBox'), al = $('#alert');
-    box.className = mode; $('#tStat').textContent = mode === 'look' ? '👀 LOOKING!' : mode === 'warn' ? '⚠️ Turning…' : '✍️ Writing';
-    al.className = mode; al.style.display = mode ? 'block' : 'none';
-    al.firstElementChild.innerHTML = mode === 'look' ? '👀 FREEZE!<small>The teacher is watching the class</small>' : mode === 'warn' ? '⚠️ The teacher is about to turn!' : '';
+    box.className = mode === 'announce' || mode === 'drink' ? 'safe' : mode;
+    $('#tStat').textContent = { look: '👀 LOOKING!', warn: '⚠️ Turning…', announce: '📢 Listening', drink: '🥤 Drinking' }[mode] || '✍️ Writing';
+    al.className = mode; al.style.display = ['look', 'warn', 'announce'].includes(mode) ? 'block' : 'none';
+    al.firstElementChild.innerHTML = { look: '👀 FREEZE!<small>The teacher is watching the class</small>', warn: '⚠️ The teacher is about to turn!', announce: '📢 Announcement!<small>Everyone is listening. Eat fast!</small>' }[mode] || '';
   }
 }
 function updateFoods(dt) {
