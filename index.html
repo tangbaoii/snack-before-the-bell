@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snack Before the Bell</title>
+<style>
+  :root { --ink:#1d2330; --paper:#fffaf0; --accent:#ff7a3d; --ok:#3fbf6a; --bad:#e5484d; --gold:#ffc83d; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#1b1f27; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; color:var(--ink); user-select:none; }
+  canvas#c { display:block; width:100vw; height:100vh; }
+  .key { display:inline-flex; align-items:center; justify-content:center; font-family:ui-monospace,Menlo,monospace; font-weight:800; border-radius:5px; }
+
+  #hud { position:fixed; top:10px; left:50%; transform:translateX(-50%); display:none; gap:10px; align-items:stretch; pointer-events:none; }
+  #hud > div { background:rgba(255,250,240,.92); border-radius:12px; padding:6px 14px; box-shadow:0 3px 0 rgba(0,0,0,.25); }
+  #hudLevel { font-size:13px; line-height:1.3; white-space:nowrap; }
+  #hudLevel b { display:block; font-size:15px; }
+  #hudTime { font-size:30px; font-weight:900; font-variant-numeric:tabular-nums; min-width:104px; text-align:center; }
+  #hudTime.hurry { color:var(--bad); }
+  #hudScore { min-width:190px; }
+  #hudScore .num { font-size:20px; font-weight:900; font-variant-numeric:tabular-nums; }
+  #hudScore .num small { font-size:13px; color:#666; font-weight:600; }
+  #bar { height:7px; background:#e3dccb; border-radius:4px; overflow:hidden; margin-top:3px; }
+  #bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .25s; }
+  #bar i.full { background:var(--ok); }
+  #hudStats { font-size:12px; color:#555; margin-top:2px; }
+
+  #labels { position:fixed; inset:0; pointer-events:none; }
+  .flabel { position:absolute; left:0; top:0; transform-origin:50% 100%; background:rgba(255,250,240,.9); border-radius:8px; padding:3px 5px 4px; text-align:center; font-size:11px; box-shadow:0 2px 0 rgba(0,0,0,.2); border:2px solid transparent; white-space:nowrap; }
+  .flabel .h { font-weight:700; }
+  .flabel .h span { color:var(--accent); font-weight:900; margin-left:3px; }
+  .flabel .s { display:grid; grid-template-columns:repeat(6,13px); gap:2px; justify-content:center; margin-top:2px; }
+  .flabel .s .key { width:13px; height:14px; font-size:9px; background:#e8e1d2; color:#555; border-radius:3px; }
+  .flabel .s .key.done { background:var(--ok); color:#fff; }
+  .flabel .s .key.cur { background:var(--ink); color:#fff; }
+  .flabel.sel { border-color:var(--gold); background:#fff; }
+  .flabel.locked { border-color:var(--accent); }
+  .flabel.empty { opacity:0; }
+
+  #seqPanel { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:rgba(29,35,48,.82); color:#fff; border-radius:14px; padding:8px 14px 10px; text-align:center; display:none; pointer-events:none; max-width:96vw; }
+  #seqPanel .t { font-size:13px; opacity:.85; margin-bottom:6px; }
+  #seqPanel .t b { color:var(--gold); }
+  #seqPanel .row { display:flex; gap:5px; justify-content:center; flex-wrap:wrap; }
+  #seqPanel .key { width:34px; height:38px; font-size:20px; background:rgba(255,255,255,.15); color:#fff; }
+  #seqPanel .key.done { background:var(--ok); }
+  #seqPanel .key.cur { background:#fff; color:var(--ink); transform:translateY(-3px); box-shadow:0 3px 0 var(--gold); }
+  #seqPanel.shake { animation:shake .3s; }
+  @keyframes shake { 20%{transform:translateX(calc(-50% - 8px))} 40%{transform:translateX(calc(-50% + 8px))} 60%{transform:translateX(calc(-50% - 5px))} 80%{transform:translateX(calc(-50% + 5px))} }
+
+  #lock { position:fixed; inset:0; display:none; pointer-events:none; background:radial-gradient(circle, rgba(140,190,60,.0) 30%, rgba(120,170,40,.45)); }
+  #lock .n { font-size:150px; font-weight:900; color:#fff; text-shadow:0 6px 0 rgba(0,0,0,.35); line-height:1; }
+  #lock .m { font-size:20px; color:#fff; font-weight:700; text-shadow:0 2px 4px rgba(0,0,0,.6); margin-top:8px; }
+  #lock .pop { animation:pop .35s; }
+  @keyframes pop { from{transform:scale(1.6);opacity:.3} to{transform:scale(1);opacity:1} }
+
+  #seqPanel .spit { width:240px; height:8px; background:rgba(255,255,255,.2); border-radius:4px; overflow:hidden; margin:6px auto 2px; }
+  #seqPanel .spit i { display:block; height:100%; background:#c6f06a; }
+  #teacherBox { min-width:190px; text-align:center; font-size:13px; transition:background .15s; }
+  #teacherBox b { display:block; font-size:17px; }
+  #teacherBox.warn { background:#ffd84d !important; animation:blink .25s infinite alternate; }
+  #teacherBox.look { background:var(--bad) !important; color:#fff; }
+  @keyframes blink { to { transform:scale(1.06); } }
+  #alert { position:fixed; left:0; right:0; top:92px; display:none; text-align:center; pointer-events:none; }
+  #alert div { display:inline-block; background:var(--bad); color:#fff; font-size:34px; font-weight:900; padding:6px 28px; border-radius:16px; box-shadow:0 6px 0 rgba(0,0,0,.35); animation:alertPulse .4s infinite alternate; letter-spacing:1px; }
+  #alert.warn div { background:#ffd84d; color:var(--ink); font-size:26px; animation:none; }
+  #alert small { display:block; font-size:16px; font-weight:700; opacity:.9; }
+  @keyframes alertPulse { from { transform:scale(1); } to { transform:scale(1.08); } }
+  #vignette.look { animation:vig .35s infinite alternate; }
+  @keyframes vig { from { box-shadow:inset 0 0 120px 30px rgba(229,72,77,.6); } to { box-shadow:inset 0 0 200px 70px rgba(229,72,77,.85); } }
+  #vignette { position:fixed; inset:0; pointer-events:none; box-shadow:inset 0 0 130px 30px rgba(229,72,77,.65); opacity:0; transition:opacity .12s; }
+  #flash { position:fixed; inset:0; pointer-events:none; background:#fff; opacity:0; }
+
+  #toast { position:fixed; top:190px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:8px 16px; border-radius:20px; font-weight:700; opacity:0; transition:opacity .2s; pointer-events:none; white-space:nowrap; }
+  #toast.show { opacity:1; }
+  .float { position:fixed; font-weight:900; font-size:26px; color:var(--gold); text-shadow:0 2px 0 #000, 0 0 6px rgba(0,0,0,.5); pointer-events:none; animation:floatUp 1s forwards; transform:translate(-50%,-50%); }
+  .float.bad { color:#c6f06a; }
+  @keyframes floatUp { to { margin-top:-70px; opacity:0; } }
+
+  #bubble { position:fixed; display:none; background:#fff; padding:10px 16px; border-radius:16px; font-weight:800; font-size:20px; box-shadow:0 4px 0 rgba(0,0,0,.3); transform:translate(-50%,-100%); }
+  #bubble:after { content:""; position:absolute; bottom:-12px; left:50%; border:8px solid transparent; border-top:10px solid #fff; transform:translateX(-50%); }
+
+  #big { position:fixed; inset:0; display:none; align-items:center; justify-content:center; pointer-events:none; font-size:84px; font-weight:900; color:#fff; text-shadow:0 6px 0 rgba(0,0,0,.4); text-align:center; line-height:1.15; }
+  #big small { display:block; font-size:24px; font-weight:700; }
+
+  #panel { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(15,18,25,.55); padding:16px; }
+  #panel.hidden { display:none; }
+  .card { background:var(--paper); border-radius:20px; padding:24px 28px; width:min(560px,100%); max-height:94vh; overflow:auto; box-shadow:0 10px 0 rgba(0,0,0,.25); text-align:center; }
+  .card h1 { margin:0 0 4px; font-size:40px; letter-spacing:2px; }
+  .card h2 { margin:0 0 8px; font-size:30px; }
+  .card .sub { color:#666; margin-bottom:14px; }
+  .card .rules { text-align:left; font-size:14px; line-height:1.7; background:#f3ecdc; border-radius:12px; padding:10px 14px; margin:10px 0 14px; }
+  .card .rules .key { background:var(--ink); color:#fff; padding:0 5px; font-size:12px; }
+  .levels { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:10px 0 6px; }
+  .levels button { padding:10px 0; font-size:13px; }
+  .levels button .st { display:block; font-size:12px; color:var(--gold); letter-spacing:1px; min-height:14px; }
+  button { font:inherit; font-weight:800; border:0; border-radius:12px; padding:11px 22px; background:var(--accent); color:#fff; cursor:pointer; box-shadow:0 4px 0 #b4501f; margin:4px; }
+  button:active { transform:translateY(3px); box-shadow:0 1px 0 #b4501f; }
+  button.ghost { background:#ddd3bf; color:var(--ink); box-shadow:0 4px 0 #a99d86; }
+  button:disabled { background:#ccc; box-shadow:0 4px 0 #999; cursor:not-allowed; color:#888; }
+  .stars { font-size:46px; letter-spacing:6px; color:#d6cdb8; margin:4px 0; }
+  .stars b { color:var(--gold); font-weight:400; }
+  table.res { margin:8px auto 14px; border-collapse:collapse; font-size:16px; }
+  table.res td { padding:4px 14px; } table.res td:first-child { color:#777; text-align:right; } table.res td:last-child { font-weight:800; text-align:left; }
+  .hint { font-size:12px; color:#888; margin-top:8px; }
+
+  #touch { position:fixed; bottom:90px; right:14px; display:none; grid-template-columns:repeat(3,56px); gap:6px; }
+  #touch button { padding:0; height:56px; margin:0; font-size:20px; background:rgba(255,250,240,.85); color:var(--ink); box-shadow:0 3px 0 rgba(0,0,0,.3); }
+  @media (max-width:640px) {
+    #alert div { font-size:28px; } #teacherBox { min-width:110px; }
+    #hud { top:6px; gap:5px; } #hud > div { padding:4px 8px; } #hudTime { font-size:22px; min-width:70px; } #hudScore { min-width:120px; } #hudLevel { display:none; }
+    #seqPanel .key { width:24px; height:28px; font-size:15px; }
+    .levels { grid-template-columns:repeat(3,1fr); }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="hud">
+  <div id="hudLevel"><b id="hLvl">Class 1</b><span id="hSubj">Math</span></div>
+  <div id="hudTime">01:30</div>
+  <div id="hudScore"><div class="num"><span id="hScore">0</span> <small>/ <span id="hTarget">5</span> eaten</small></div><div id="bar"><i></i></div><div id="hudStats">Bag <b id="hBag">0</b> · Points <b id="hPts">0</b> · Spits <b id="hWrong">0</b> · Close calls <b id="hNear">0</b></div></div>
+  <div id="teacherBox"><span>Teacher</span><b id="tStat">✍️ Writing</b></div>
+</div>
+<div id="seqPanel"></div>
+<div id="lock"></div>
+<div id="toast"></div>
+<div id="alert"><div></div></div>
+<div id="bubble"></div>
+<div id="big"></div>
+<div id="touch">
+  <button data-k="KeyQ">Q</button><button data-k="KeyW">W</button><button data-k="KeyE">E</button>
+  <button data-k="KeyA">A</button><button data-k="KeyS">S</button><button data-k="KeyD">D</button>
+</div>
+<div id="panel"></div>
+
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   配置：关卡与食物（仿 sneakyschool 的 JSON 关卡数据，改数值即可调难度）
+   ============================================================ */
+const LEVELS = [
+  { subj:'Math',       board:'Chapter 3   Quadratic Equations   ax² + bx + c = 0', time:90, turnEvery:[5,9],   watch:[1.6,2.8], warn:0.9,  fake:0,   items:['bun','jelly','onigiri','sandwich','yakisoba'] },
+  { subj:'Literature', board:'"Spring Morning"   —   memorize it by Friday!',        time:90, turnEvery:[4.5,8], watch:[1.6,3.0], warn:0.85, fake:.2,  items:['bun','jelly','onigiri','sandwich','yakisoba','chicken'] },
+  { subj:'English',    board:'Unit 5   What did you eat for breakfast?',              time:90, turnEvery:[4,7.5], watch:[1.7,3.0], warn:0.8,  fake:.25, items:['jelly','onigiri','sandwich','yakisoba','chicken','tea','bun'] },
+  { subj:'Physics',    board:"Newton's Second Law   F = m a",                         time:85, turnEvery:[3.5,7], watch:[1.8,3.2], warn:0.75, fake:.3,  items:['bun','jelly','onigiri','onigiri','sandwich','yakisoba','chicken','tea'] },
+  { subj:'History',    board:'FINAL EXAM REVIEW   ※ Everything is important ※',      time:85, turnEvery:[3,6],   watch:[2.0,3.4], warn:0.7,  fake:.35, items:['bun','jelly','jelly','onigiri','sandwich','yakisoba','chicken','tea','tea'] },
+];
+const FOODS = {
+  bun:      { name:'Bun',            pts:10,  len:4,  color:'#d89a4e' },
+  jelly:    { name:'Energy Jelly',   pts:15,  len:5,  color:'#e8eef7' },
+  onigiri:  { name:'Onigiri',        pts:20,  len:6,  color:'#f4f4ee' },
+  sandwich: { name:'Sandwich',       pts:40,  len:8,  color:'#f0d9a0' },
+  yakisoba: { name:'Noodle Hot Dog', pts:55,  len:9,  color:'#8a5a2b' },
+  chicken:  { name:'Fried Chicken',  pts:70,  len:10, color:'#d08a2c' },
+  tea:      { name:'Bubble Tea',     pts:100, len:12, color:'#c89b6d' },
+};
+const SPIT_LOCK = 3;
+const SLOT_X = [-0.48, -0.24, 0, 0.24, 0.48], SLOT_Z = 2.88, DESK_Y = 0.75;
+const CAM_POS = new THREE.Vector3(0, 1.2, 3.65), CAM_LOOK = new THREE.Vector3(0, 0.95, 2.85 - 0.6);
+const PLAYER_Z = 2.95;
+
+/* ============================================================ utils */
+const $ = s => document.querySelector(s);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pickW = obj => { const ks = Object.keys(obj); let t = ks.reduce((s, k) => s + obj[k].weight, 0) * Math.random(); for (const k of ks) { t -= obj[k].weight; if (t <= 0) return k; } return ks[0]; };
+const lerp = (a, b, t) => a + (b - a) * t;
+const damp = (a, b, k, dt) => lerp(a, b, 1 - Math.exp(-k * dt));
+const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem('snack-bell-v3') || '') || null; } catch { return null; } },
+  set(v) { try { localStorage.setItem('snack-bell-v3', JSON.stringify(v)); } catch {} },
+};
+let save = store.get() || { unlocked: 1, stars: [0, 0, 0, 0, 0] };
+
+/* ============================================================ audio (WebAudio 合成，无外部文件) */
+let ac, master, noiseBuf;
+function ensureAudio() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.55; master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (ac.state === 'suspended') ac.resume();
+}
+function tone(f, d, o = {}) {
+  if (!ac) return; const t = ac.currentTime + (o.at || 0);
+  const osc = ac.createOscillator(); osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(f, t);
+  if (o.slide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, f + o.slide), t + d);
+  const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(o.gain || 0.2, t + (o.attack || 0.006)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  osc.connect(g).connect(master); osc.start(t); osc.stop(t + d + 0.05);
+}
+function noise(d, o = {}) {
+  if (!ac) return; const t = ac.currentTime + (o.at || 0);
+  const src = ac.createBufferSource(); src.buffer = noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = o.type || 'bandpass'; f.frequency.setValueAtTime(o.freq || 1000, t); f.Q.value = o.q || 1;
+  if (o.slide) f.frequency.exponentialRampToValueAtTime(Math.max(40, (o.freq || 1000) + o.slide), t + d);
+  const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(o.gain || 0.3, t + (o.attack || 0.004)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  src.connect(f).connect(g).connect(master); src.start(t, Math.random() * 1.5); src.stop(t + d + 0.05);
+}
+const sfx = {
+  chalk() { noise(rand(.04, .09), { freq: rand(3500, 5500), q: 5, gain: 0.07 }); },
+  step(at = 0) { tone(85, .14, { gain: .4, slide: -35, at }); noise(.06, { freq: 260, q: 1, gain: .25, at }); },
+  bite() { noise(.06, { freq: rand(1800, 3200), q: 2, gain: .45 }); noise(.08, { freq: 700, q: 1.5, gain: .3, at: .03 }); },
+  done() { tone(660, .09, { type: 'triangle', gain: .25 }); tone(990, .16, { type: 'triangle', gain: .25, at: .08 }); tone(1320, .2, { type: 'triangle', gain: .18, at: .16 }); },
+  spit() { noise(.4, { freq: 1400, slide: -1100, q: 1.2, gain: .55 }); tone(320, .35, { type: 'sawtooth', gain: .12, slide: -220 }); },
+  tick() { tone(1100, .06, { type: 'square', gain: .08 }); },
+  select() { tone(520, .05, { type: 'triangle', gain: .12 }); },
+  deny() { tone(180, .12, { type: 'square', gain: .1 }); },
+  caught() { [220, 277, 330].forEach((f, i) => tone(f, 1.1, { type: 'sawtooth', gain: .12, slide: -90, at: i * .02 })); noise(.25, { freq: 3000, q: 8, gain: .3 }); tone(1800, .5, { gain: .12, at: .05, slide: 400 }); },
+  bell() { const n = [329.6, 261.6, 293.7, 196, 196, 293.7, 329.6, 261.6]; n.forEach((f, i) => { tone(f, 1.3, { gain: .22, at: i * .42, attack: .01 }); tone(f * 2.76, .6, { gain: .05, at: i * .42 }); }); },
+  win() { [523, 659, 784, 1047].forEach((f, i) => tone(f, .3, { type: 'triangle', gain: .2, at: i * .1 })); },
+  lose() { [392, 330, 262].forEach((f, i) => tone(f, .4, { type: 'triangle', gain: .2, at: i * .2 })); },
+  turn() { noise(.3, { freq: 400, slide: 2500, q: .8, gain: .35 }); tone(392, .18, { type: 'square', gain: .16, at: .05 }); tone(311, .35, { type: 'square', gain: .16, at: .22 }); },
+  warnBeep() { tone(880, .09, { type: 'square', gain: .1 }); tone(880, .09, { type: 'square', gain: .1, at: .16 }); },
+  ahem() { tone(150, .14, { type: 'sawtooth', gain: .12, slide: 30 }); noise(.12, { freq: 500, q: 1, gain: .22, at: .18 }); },
+  gasp() { noise(.5, { freq: 900, q: .7, gain: .25, slide: 500 }); },
+};
+
+/* ============================================================ three 基础 */
+const canvas = $('#c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#e9e4d6');
+scene.fog = new THREE.Fog('#e9e4d6', 14, 26);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 60);
+scene.add(new THREE.HemisphereLight('#ffffff', '#8a7358', 1.9));
+const sun = new THREE.DirectionalLight('#fff3dc', 1.6); sun.position.set(-8, 7, 2); scene.add(sun);
+const fill = new THREE.DirectionalLight('#dfe8ff', 0.5); fill.position.set(5, 4, 6); scene.add(fill);
+
+const matCache = new Map(), geoCache = new Map();
+function mat(color, opts) {
+  const key = color + (opts ? JSON.stringify(opts) : '');
+  if (!matCache.has(key)) matCache.set(key, new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts }));
+  return matCache.get(key);
+}
+function boxGeo(w, h, d) { const k = `${w}|${h}|${d}`; if (!geoCache.has(k)) geoCache.set(k, new THREE.BoxGeometry(w, h, d)); return geoCache.get(k); }
+function box(w, h, d, color, parent, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(boxGeo(w, h, d), mat(color)); m.position.set(x, y, z); parent.add(m); return m; }
+function mesh(geo, color, parent, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(geo, typeof color === 'string' ? mat(color) : color); m.position.set(x, y, z); parent && parent.add(m); return m; }
+function emojiSprite(ch, size = .3) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
+  c.font = '100px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ch, 64, 72);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false })); s.scale.setScalar(size); s.renderOrder = 10; return s;
+}
+
+/* ============================================================ 教室 */
+const room = new THREE.Group(); scene.add(room);
+const RX = 6, RZF = -8, RZB = 6, RH = 3.4;
+box(RX * 2, .1, RZB - RZF, '#c9a274', room, 0, -.05, (RZF + RZB) / 2);          // 地板
+box(RX * 2, .1, RZB - RZF, '#f2efe6', room, 0, RH, (RZF + RZB) / 2);            // 天花板
+box(RX * 2, RH, .1, '#ece4cf', room, 0, RH / 2, RZF);                            // 前墙
+box(RX * 2, RH, .1, '#ece4cf', room, 0, RH / 2, RZB);                            // 后墙
+box(.1, RH, RZB - RZF, '#e6ddc6', room, RX, RH / 2, (RZF + RZB) / 2);            // 右墙
+box(RX * 2, .9, .02, '#b9c7a8', room, 0, .45, RZF + .06);                        // 墙裙
+box(.02, .9, RZB - RZF, '#b9c7a8', room, RX - .06, .45, (RZF + RZB) / 2);
+// 左墙 + 窗户
+for (const [z0, z1] of [[RZF, -6], [-4.4, -2.6], [-1, .8], [2.4, RZB]]) box(.1, RH, z1 - z0, '#e6ddc6', room, -RX, RH / 2, (z0 + z1) / 2);
+for (const zc of [-5.2, -1.8, 1.6]) {
+  box(.1, 1.0, 1.6, '#e6ddc6', room, -RX, .5, zc); box(.1, .8, 1.6, '#e6ddc6', room, -RX, RH - .4, zc);
+  mesh(boxGeo(.04, 1.6, 1.6), new THREE.MeshBasicMaterial({ color: '#bfe3ff' }), room, -RX - .02, 1.8, zc);
+  box(.08, 1.7, .06, '#ffffff', room, -RX + .03, 1.8, zc); box(.08, .06, 1.6, '#ffffff', room, -RX + .03, 1.8, zc);
+  box(.08, .06, 1.7, '#ffffff', room, -RX + .03, 2.62, zc); box(.08, .08, 1.7, '#ffffff', room, -RX + .05, 1.0, zc);
+  box(.06, 2.2, .5, '#9fc0d8', room, -RX + .1, 2.05, zc + 1.0);                   // 窗帘
+}
+// 讲台台阶
+box(RX * 2, .15, 2.2, '#b48c5e', room, 0, .075, RZF + 1.1);
+// 黑板（画布纹理，老师写字时实时出现粉笔字）
+const bbCanvas = document.createElement('canvas'); bbCanvas.width = 1024; bbCanvas.height = 340;
+const bb = bbCanvas.getContext('2d'); const bbTex = new THREE.CanvasTexture(bbCanvas); bbTex.colorSpace = THREE.SRGBColorSpace;
+box(5.3, 1.86, .06, '#8a6a45', room, 0, 1.75, RZF + .06);
+mesh(new THREE.PlaneGeometry(5, 1.66), new THREE.MeshBasicMaterial({ map: bbTex }), room, 0, 1.75, RZF + .1);
+box(5, .05, .12, '#8a6a45', room, 0, .9, RZF + .14);
+box(.12, .03, .03, '#ffffff', room, 1.6, .935, RZF + .14); box(.12, .03, .03, '#ffd0d0', room, 1.8, .935, RZF + .14);
+let chalkCur = { x: 60, y: 130 };
+function resetBoard(lv) {
+  bb.fillStyle = '#2f4a3a'; bb.fillRect(0, 0, 1024, 340);
+  bb.fillStyle = 'rgba(240,240,230,.92)'; bb.font = 'bold 40px "Comic Sans MS","Chalkboard",sans-serif'; bb.fillText(lv.board, 50, 70);
+  bb.font = '22px "Comic Sans MS","Chalkboard",sans-serif'; bb.fillStyle = 'rgba(240,240,230,.6)'; bb.fillText('NO EATING IN CLASS!', 760, 318);
+  chalkCur = { x: 60, y: 135 }; bbTex.needsUpdate = true;
+}
+function chalkStroke() {
+  bb.strokeStyle = 'rgba(240,240,230,.85)'; bb.lineWidth = 3; bb.lineCap = 'round'; bb.beginPath();
+  let x = chalkCur.x, y = chalkCur.y; bb.moveTo(x + rand(0, 14), y + rand(-12, 12));
+  for (let i = 0; i < 3; i++) bb.lineTo(x + rand(0, 18), y + rand(-14, 14));
+  bb.stroke(); chalkCur.x += rand(14, 26);
+  if (chalkCur.x > 960) { chalkCur.x = 60 + rand(0, 30); chalkCur.y += 46; }
+  if (chalkCur.y > 290) { bb.fillStyle = '#2f4a3a'; bb.fillRect(30, 100, 980, 200); chalkCur.y = 135; }
+  bbTex.needsUpdate = true;
+}
+// 时钟
+const clockCanvas = document.createElement('canvas'); clockCanvas.width = clockCanvas.height = 256;
+{ const c = clockCanvas.getContext('2d'); c.fillStyle = '#fff'; c.beginPath(); c.arc(128, 128, 126, 0, 7); c.fill();
+  c.fillStyle = '#222'; c.font = 'bold 30px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI * 2; c.fillText(i, 128 + Math.sin(a) * 96, 128 - Math.cos(a) * 96); }
+  for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2, r0 = i % 5 ? 116 : 110; c.lineWidth = i % 5 ? 2 : 4; c.beginPath(); c.moveTo(128 + Math.sin(a) * r0, 128 - Math.cos(a) * r0); c.lineTo(128 + Math.sin(a) * 124, 128 - Math.cos(a) * 124); c.stroke(); } }
+const clock = new THREE.Group(); clock.position.set(3.7, 2.75, RZF + .08); room.add(clock);
+const rim = mesh(new THREE.CylinderGeometry(.38, .38, .06, 20), '#333', clock); rim.rotation.x = Math.PI / 2;
+const cTex = new THREE.CanvasTexture(clockCanvas); cTex.colorSpace = THREE.SRGBColorSpace;
+mesh(new THREE.CircleGeometry(.35, 24), new THREE.MeshBasicMaterial({ map: cTex }), clock, 0, 0, .035);
+function hand(len, w, color, z) { const p = new THREE.Group(); p.position.z = z; clock.add(p); box(w, len, .01, color, p, 0, len / 2 - .04, 0); return p; }
+const hHour = hand(.2, .03, '#222', .045), hMin = hand(.3, .02, '#222', .05), hSec = hand(.31, .008, '#e5484d', .055);
+// 日光灯
+for (const x of [-3, 0, 3]) for (const z of [-5, -1.5, 2]) { box(.3, .06, 1.6, '#cfcfcf', room, x, RH - .05, z); mesh(boxGeo(.2, .03, 1.5), new THREE.MeshBasicMaterial({ color: '#ffffff' }), room, x, RH - .09, z); }
+// 讲台
+box(1.2, 1.05, .6, '#8b5e3c', room, -1.9, .15 + .525, RZF + 1.5); box(1.3, .05, .7, '#6e4a2f', room, -1.9, 1.22, RZF + 1.5);
+box(.25, .05, .18, '#2b6cb0', room, -1.8, 1.27, RZF + 1.5);
+// 右墙：门、公告栏
+box(.06, 2.1, 1, '#9b7653', room, RX - .05, 1.05, -6.2); box(.06, 1, 1.8, '#c79a5a', room, RX - .05, 1.7, -2);
+for (let i = 0; i < 5; i++) box(.03, rand(.2, .35), rand(.2, .35), ['#ffffff', '#ffe08a', '#ffb3b3', '#bde0ff'][i % 4], room, RX - .09, 1.7 + rand(-.3, .3), -2.6 + i * .3);
+
+// 课桌椅
+function makeDesk(x, z, w = 1.2) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); room.add(g);
+  box(w, .05, .6, '#d9b27c', g, 0, DESK_Y - .025, 0); box(w - .04, .14, .5, '#c49a63', g, 0, DESK_Y - .12, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(.04, DESK_Y - .05, .04, '#7d8794', g, sx * (w / 2 - .06), (DESK_Y - .05) / 2, sz * .25);
+  // 椅子
+  for (const cx of (w > 1 ? [-.28, .28] : [0])) {
+    box(.42, .04, .4, '#c49a63', g, cx, .45, .55); box(.42, .3, .03, '#c49a63', g, cx, .78, .76);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(.03, .45, .03, '#7d8794', g, cx + sx * .18, .225, .55 + sz * .17);
+    box(.03, .35, .03, '#7d8794', g, cx - .18, .6, .76); box(.03, .35, .03, '#7d8794', g, cx + .18, .6, .76);
+  }
+  return g;
+}
+const COLS = [-3.4, -1.7, 0, 1.7, 3.4], ROWS = [-4.4, -2.6, -.8, 1.05, PLAYER_Z, 4.8];
+const seats = [];
+for (const z of ROWS) for (const x of COLS) { makeDesk(x, z); if (!(x === 0 && z === PLAYER_Z)) seats.push({ x, z }); }
+
+/* ============================================================ 角色：同学 */
+const SKIN = ['#f3d2b3', '#eac3a0', '#d9a982', '#f6dcc4'];
+const HAIR = ['#1b1b1f', '#2a1d16', '#3b2a1e', '#6b4a2f', '#a0622d', '#2d2d3a'];
+const UNI = ['#2f4f8f', '#2f4f8f', '#f5f5f5', '#3d6e5c', '#7d8794', '#8f3b3b'];
+const ACTIONS = ['daze', 'write', 'write', 'peek', 'sleep'];
+const headGeo = new THREE.IcosahedronGeometry(.13, 1), hairGeo = new THREE.SphereGeometry(.142, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+function makeStudent(seat, side) {
+  const root = new THREE.Group(); root.position.set(seat.x + side * .28, 0, seat.z + .55); room.add(root);
+  const uni = UNI[Math.floor(Math.random() * UNI.length)], skin = SKIN[Math.floor(Math.random() * SKIN.length)], hair = HAIR[Math.floor(Math.random() * HAIR.length)];
+  box(.14, .12, .4, '#2d3340', root, -.09, .53, -.12); box(.14, .12, .4, '#2d3340', root, .09, .53, -.12);
+  const body = new THREE.Group(); body.position.y = .47; root.add(body);
+  box(.38, .46, .22, uni, body, 0, .25, 0);
+  if (uni === '#f5f5f5') box(.1, .3, .01, '#2f4f8f', body, 0, .3, -.115);
+  const head = new THREE.Group(); head.position.y = .52; body.add(head);
+  mesh(headGeo, skin, head, 0, .12, 0);
+  const hr = mesh(hairGeo, hair, head, 0, .13, .01); hr.scale.set(1, 1.05, 1.05);
+  if (Math.random() < .45) box(.26, .22, .08, hair, head, 0, .06, .1); // 长发
+  if (Math.random() < .25) { const pt = box(.07, .18, .07, hair, head, 0, .08, .17); pt.rotation.x = .4; } // 马尾
+  box(.035, .035, .01, '#1b1b1f', head, -.05, .13, -.127); box(.035, .035, .01, '#1b1b1f', head, .05, .13, -.127);
+  if (Math.random() < .3) { box(.08, .05, .01, '#333', head, -.05, .13, -.135); box(.08, .05, .01, '#333', head, .05, .13, -.135); }
+  box(.06, .015, .01, '#b0645a', head, 0, .06, -.127);
+  const arms = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(s * .23, .42, 0); body.add(p); box(.09, .4, .09, uni, p, 0, -.2, 0); mesh(boxGeo(.08, .08, .08), skin, p, 0, -.42, 0); p.rotation.x = 1.15; return p; });
+  const sweat = emojiSprite('💦', .22); sweat.position.set(.18, .32, 0); sweat.visible = false; head.add(sweat);
+  const emo = emojiSprite('🤩', .35); emo.position.set(0, .45, 0); emo.visible = false; head.add(emo);
+  const toPlayer = Math.atan2(-(0 - root.position.x), -(CAM_POS.z - root.position.z));
+  return { root, body, head, arms, sweat, emo, action: 'write', timer: rand(0, 4), yaw: 0, pitch: 0, lean: 0, nervous: 0, toPlayer, phase: rand(0, 6) };
+}
+const students = [];
+function spawnStudents() {
+  students.forEach(s => room.remove(s.root)); students.length = 0;
+  for (const seat of seats) {
+    if (seat.z > 4) continue;
+    for (const side of [-1, 1]) {
+      const nearPlayer = Math.abs(seat.z - PLAYER_Z) < .1 && Math.abs(seat.x) < 2;
+      if (Math.random() < (nearPlayer ? .95 : .72)) students.push(makeStudent(seat, side));
+    }
+  }
+  // 玩家同桌位置（右侧）
+  students.push(makeStudent({ x: 0, z: PLAYER_Z }, 1.9));
+}
+function updateStudents(dt, t) {
+  for (const s of students) {
+    if (G && G.state === 'ending') {
+      s.root.rotation.y = damp(s.root.rotation.y, s.toPlayer, 5, dt); s.body.position.y = damp(s.body.position.y, .78, 4, dt);
+      s.head.rotation.x = damp(s.head.rotation.x, -.15 + Math.sin(t * 6 + s.phase) * .08, 6, dt); s.head.rotation.y = damp(s.head.rotation.y, 0, 6, dt);
+      s.arms.forEach((a, i) => a.rotation.x = damp(a.rotation.x, Math.PI + Math.sin(t * 10 + s.phase + i) * .3, 6, dt));
+      s.emo.visible = true; s.sweat.visible = false; continue;
+    }
+    s.timer -= dt;
+    if (s.timer <= 0) { s.action = ACTIONS[Math.floor(Math.random() * ACTIONS.length)]; s.timer = rand(3, 7); }
+    let ty = 0, tp = 0, lean = 0, wr = 1.15, wl = 1.15;
+    if (s.action === 'daze') { ty = .9; tp = -.15; }
+    else if (s.action === 'write') { tp = .45; wr = 1.05 + Math.sin(t * 9 + s.phase) * .12; }
+    else if (s.action === 'peek') { ty = THREE.MathUtils.clamp(s.toPlayer, -1.3, 1.3); tp = .1; }
+    else if (s.action === 'sleep') { tp = .9; lean = .45; wr = wl = 1.45; }
+    if (s.nervous > 0) { s.nervous -= dt; ty = THREE.MathUtils.clamp(s.toPlayer, -2.6, 2.6); tp = -.05; lean = 0; }
+    s.sweat.visible = s.nervous > 0;
+    const k = s.nervous > 0 ? 12 : 3;
+    s.head.rotation.y = damp(s.head.rotation.y, ty, k, dt); s.head.rotation.x = damp(s.head.rotation.x, tp, k, dt);
+    s.body.rotation.x = damp(s.body.rotation.x, lean, 3, dt); s.body.position.y = damp(s.body.position.y, .47, 4, dt);
+    s.root.rotation.y = damp(s.root.rotation.y, 0, 4, dt);
+    s.arms[1].rotation.x = damp(s.arms[1].rotation.x, wr, 8, dt); s.arms[0].rotation.x = damp(s.arms[0].rotation.x, wl, 8, dt);
+  }
+}
+function nervousGlance() {
+  const front = students.filter(s => s.root.position.z < PLAYER_Z - .5 && s.root.position.z > -1.5);
+  if (!front.length) return; const s = front[Math.floor(Math.random() * front.length)]; s.nervous = rand(.9, 1.4);
+}
+
+/* ============================================================ 角色：老师 */
+function plaidTex() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d');
+  c.fillStyle = '#2c3833'; c.fillRect(0, 0, 64, 64);
+  c.fillStyle = 'rgba(170,160,118,.85)'; for (const [p, w] of [[5, 3], [21, 2], [38, 4], [53, 2]]) { c.fillRect(p, 0, w, 64); c.fillRect(0, p, 64, w); }
+  c.fillStyle = 'rgba(28,38,58,.65)'; for (const [p, w] of [[11, 7], [44, 6]]) { c.fillRect(p, 0, w, 64); c.fillRect(0, p, 64, w); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2); t.magFilter = THREE.NearestFilter; return t;
+}
+// Q 版老师：大头、灰色后梳发、蓝灰眼睛、深色格子衬衫
+const TS = 1.8;
+function makeTeacher() {
+  const g = new THREE.Group(); g.position.set(.85, .15, RZF + .8); g.scale.setScalar(TS); room.add(g);
+  const skin = '#f6d5bd', plaid = new THREE.MeshLambertMaterial({ map: plaidTex() }), hairC = '#a5a5aa', hairD = '#6b6b72';
+  const soft = c => mat(c, { flatShading: false }), sph = (r, w = 12, h = 10) => new THREE.SphereGeometry(r, w, h);
+  for (const s of [-1, 1]) { box(.15, .3, .17, '#3b3f4a', g, s * .09, .15, 0); box(.16, .07, .24, '#2a2420', g, s * .09, .035, .03); }
+  const body = new THREE.Group(); body.position.y = .3; g.add(body);
+  mesh(new THREE.BoxGeometry(.46, .42, .3), plaid, body, 0, .21, 0);
+  for (const s of [-1, 1]) { const cl = mesh(boxGeo(.13, .07, .025), plaid, body, s * .065, .4, .155); cl.rotation.z = s * -.55; }
+  box(.014, .32, .01, '#1e2622', body, 0, .2, .152);
+  for (let i = 0; i < 3; i++) box(.02, .02, .01, '#d8d2bd', body, 0, .33 - i * .1, .158);
+  const head = new THREE.Group(); head.position.y = .44; body.add(head);
+  mesh(sph(.3, 20, 16), soft(skin), head, 0, .27, 0);
+  for (const s of [-1, 1]) mesh(sph(.055, 8, 6), soft(skin), head, s * .295, .25, 0);
+  const cap = mesh(new THREE.SphereGeometry(.318, 20, 12, 0, Math.PI * 2, 0, Math.PI * .55), soft(hairC), head, 0, .29, -.03); cap.rotation.x = -.38;
+  const quiff = mesh(sph(.17), soft(hairC), head, .03, .5, .13); quiff.scale.set(1.55, .55, .95); quiff.rotation.z = -.15;
+  const shine = mesh(sph(.08), soft('#d6d6db'), head, -.05, .56, .13); shine.scale.set(1.6, .4, .8);
+  for (const s of [-1, 1]) { const sd = mesh(sph(.1), soft(hairD), head, s * .265, .34, -.04); sd.scale.set(.5, 1, 1.25); }
+  const eyes = [-1, 1].map(s => {
+    const e = mesh(sph(.048), soft('#2b3140'), head, s * .105, .25, .275); e.scale.set(.85, 1.05, .35);
+    const ir = mesh(sph(.028), soft('#7d97ad'), head, s * .105, .236, .289); ir.scale.set(1, 1, .3);
+    mesh(sph(.012, 6, 4), new THREE.MeshBasicMaterial({ color: '#ffffff' }), head, s * .105 + .016, .272, .293);
+    return e;
+  });
+  const brows = [-1, 1].map(s => box(.09, .018, .02, '#5d5d63', head, s * .105, .33, .268));
+  for (const s of [-1, 1]) { const ck = mesh(sph(.04), soft('#f4a7a0'), head, s * .17, .17, .228); ck.scale.set(1, .6, .25); }
+  mesh(sph(.026, 8, 6), soft('#eebba0'), head, 0, .2, .3);
+  const mouth = mesh(new THREE.TorusGeometry(.035, .008, 6, 10, Math.PI), soft('#a0524a'), head, 0, .135, .268); mouth.rotation.z = Math.PI;
+  const arms = [-1, 1].map(s => { const p = new THREE.Group(); p.position.set(s * .28, .36, 0); body.add(p); mesh(boxGeo(.12, .3, .12), plaid, p, 0, -.15, 0); mesh(sph(.065, 8, 6), soft(skin), p, 0, -.33, 0); return p; });
+  box(.025, .025, .08, '#ffffff', arms[1], 0, -.37, .04);
+  const mark = emojiSprite('❗', .35); mark.position.set(0, .78, 0); mark.visible = false; head.add(mark);
+  const qmark = emojiSprite('❓', .32); qmark.position.set(0, .78, 0); qmark.visible = false; head.add(qmark);
+  const look = emojiSprite('👀', .4); look.position.set(0, .8, 0); look.visible = false; head.add(look);
+  return { g, body, head, arms, eyes, brows, mouth, mark, qmark, look };
+}
+const teacher = makeTeacher();
+const T = { state: 'board', t: 6, rot: Math.PI, chalkT: 0, hintAt: 1, hinted: false, nearCounted: false, stepT: 0, lookPhase: 0 };
+function teacherWatching() { return T.state === 'turning' || T.state === 'watching'; }
+
+/* ============================================================ 食物（低模，原点在底部中心，统一 0.2m 规格） */
+const plateGeo = new THREE.CylinderGeometry(.105, .09, .014, 14);
+function addPlate(root) { const p = mesh(plateGeo, '#f7f7f2', root, 0, .007, 0); p.name = 'plate'; return .014; }
+function makeFood(type) {
+  const root = new THREE.Group(); root.name = 'food_' + type;
+  const body = new THREE.Group(); body.name = type + '_body'; root.add(body);
+  let setP = p => { const s = 1 - .72 * p; body.scale.set(s, s, s); body.rotation.y = p * 1.2; };
+  if (type === 'bun') {
+    body.position.y = addPlate(root);
+    const bun = mesh(new THREE.SphereGeometry(.078, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#d89a4e', body); bun.scale.y = .78;
+    mesh(new THREE.CylinderGeometry(.078, .074, .012, 9), '#e9c27f', body, 0, .0, 0);
+    for (let i = 0; i < 7; i++) { const a = i * 2.4, r = rand(.015, .05); box(.008, .004, .014, '#fff8e0', body, Math.cos(a) * r, .055 - r * .35, Math.sin(a) * r); }
+  } else if (type === 'onigiri') {
+    body.position.y = addPlate(root);
+    const nori = mesh(new THREE.CylinderGeometry(.088, .088, .05, 3).rotateX(-Math.PI / 2), '#1f2620', body, 0, .044, 0); nori.name = 'wrapped_onigiri';
+    box(.05, .085, .004, '#f4f1e8', body, 0, .045, .026);
+    box(.03, .022, .005, '#ee6aa0', body, .006, .07, .028);
+    box(.032, .016, .005, '#e9c48a', body, 0, .035, .028);
+    box(.012, .012, .005, '#e0452f', body, -.012, .078, .028); box(.012, .004, .005, '#2f8f4e', body, -.012, .07, .028);
+  } else if (type === 'sandwich') {
+    body.position.y = addPlate(root);
+    let y = 0; const layers = [['#f0d9a0', .022, .09], ['#6cbf4a', .008, .095], ['#e88a8a', .012, .09], ['#f5c842', .008, .093], ['#f0d9a0', .022, .09]];
+    for (const [c, h, r] of layers) { const m = mesh(new THREE.CylinderGeometry(r, r, h, 3), c, body, 0, y + h / 2, 0); m.rotation.y = Math.PI; y += h; }
+  } else if (type === 'jelly') {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 160; const c = cv.getContext('2d');
+    c.fillStyle = '#f2f5fa'; c.fillRect(0, 0, 128, 160); c.fillStyle = '#1d4fa3'; c.fillRect(0, 0, 128, 34);
+    c.fillStyle = '#fff'; c.font = 'bold italic 24px sans-serif'; c.textAlign = 'center'; c.fillText('ENERGY', 64, 26);
+    c.fillStyle = '#1d4fa3'; c.font = 'bold 78px sans-serif'; c.fillText('in', 60, 112); c.beginPath(); c.arc(26, 52, 8, 0, 7); c.fill();
+    c.fillStyle = '#5aa0e6'; c.fillRect(0, 130, 128, 8); c.fillStyle = '#c8d3e2'; c.fillRect(0, 146, 128, 14);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const side = mat('#e4e9f1'), front = new THREE.MeshLambertMaterial({ map: tex });
+    const pouch = mesh(new THREE.BoxGeometry(.11, .14, .035), [side, side, side, side, front, side], body, 0, .07, 0); pouch.name = 'energy_jelly';
+    const sh = mesh(new THREE.CylinderGeometry(.02, .05, .03, 4).rotateY(Math.PI / 4), '#e4e9f1', body, 0, .155, 0); sh.scale.z = .45;
+    mesh(new THREE.CylinderGeometry(.012, .012, .02, 8), '#f7f7f7', body, 0, .178, 0);
+    mesh(new THREE.CylinderGeometry(.018, .018, .028, 10), '#ffffff', body, 0, .2, 0);
+    setP = p => { body.scale.set(1 - .2 * p, 1 - .1 * p, 1 - .75 * p); body.rotation.z = Math.sin(p * 9) * .06; };
+  } else if (type === 'yakisoba') {
+    const pl = mesh(plateGeo, '#f7f7f2', root, 0, .007, 0); pl.scale.set(1.15, 1, .85);
+    body.position.y = .014; body.rotation.y = .15;
+    const bun = mesh(new THREE.CapsuleGeometry(.036, .13, 4, 10).rotateZ(Math.PI / 2), mat('#c98a4a', { flatShading: false }), body, 0, .032, 0); bun.scale.set(1, .85, 1); bun.name = 'noodle_hot_dog';
+    for (let i = 0; i < 9; i++) { const n = mesh(new THREE.TorusGeometry(.018, .006, 4, 8, Math.PI), '#6b3f1c', body, -.075 + i * .019, .058, rand(-.008, .008)); n.rotation.set(rand(-.4, .4), rand(-1, 1), 0); }
+    box(.15, .012, .03, '#7a4a22', body, 0, .055, 0);
+    for (let i = 0; i < 6; i++) box(.018, .006, .006, '#ee6a8f', body, rand(-.06, .06), .072, rand(-.01, .01)).rotation.y = rand(0, 3);
+    for (let i = 0; i < 8; i++) box(.005, .004, .005, '#3f7f32', body, rand(-.07, .07), .07, rand(-.012, .012));
+  } else if (type === 'chicken') {
+    const bag = new THREE.Group(); bag.name = 'paper_bag'; root.add(bag);
+    box(.16, .11, .055, '#e3cc9a', bag, 0, .055, 0); box(.16, .02, .057, '#d0453a', bag, 0, .07, 0);
+    body.position.y = .1;
+    const cut = mesh(new THREE.DodecahedronGeometry(.075, 0), '#d08a2c', body); cut.scale.set(1.15, 1.25, .4);
+    for (let i = 0; i < 6; i++) box(.02, .02, .02, '#b8701e', body, rand(-.06, .06), rand(-.02, .08), .03);
+    setP = p => { const s = 1 - .7 * p; body.scale.set(s, s, s); body.position.y = .1 - .05 * p; };
+  } else if (type === 'tea') {
+    mesh(new THREE.CylinderGeometry(.06, .06, .006, 14), '#8fc1e3', root, 0, .003, 0);
+    const liquid = new THREE.Group(); liquid.position.y = .008; body.add(liquid);
+    mesh(new THREE.CylinderGeometry(.043, .036, .14, 12).translate(0, .07, 0), '#c89b6d', liquid);
+    const pearls = []; for (let i = 0; i < 10; i++) { const a = i * 2.1; pearls.push(mesh(new THREE.SphereGeometry(.011, 6, 4), '#2a1a12', body, Math.cos(a) * .022, .016 + (i % 3) * .013, Math.sin(a) * .022)); }
+    mesh(new THREE.CylinderGeometry(.048, .04, .16, 12, 1, true), mat('#ffffff', { transparent: true, opacity: .35, side: THREE.DoubleSide, depthWrite: false }), body, 0, .088, 0);
+    mesh(new THREE.CylinderGeometry(.05, .05, .008, 12), mat('#ffffff', { transparent: true, opacity: .55 }), body, 0, .17, 0);
+    const straw = mesh(new THREE.CylinderGeometry(.007, .007, .22, 6), '#ff6fa0', body, .012, .2, 0); straw.rotation.z = -.2;
+    body.position.y = 0;
+    setP = p => { liquid.scale.y = Math.max(.04, 1 - p); pearls.forEach((m, i) => m.visible = i < Math.ceil(10 * (1 - p))); };
+  }
+  return { root, body, setP };
+}
+
+/* 玩家的双手 */
+function makeHand(side) {
+  const g = new THREE.Group();
+  box(.085, .035, .1, '#f3d2b3', g, 0, 0, 0);
+  for (let i = 0; i < 4; i++) box(.017, .02, .05, '#f3d2b3', g, -.03 + i * .02, -.005, -.07);
+  box(.02, .02, .05, '#f3d2b3', g, -side * .05, 0, -.02).rotation.y = side * .5;
+  const sl = mesh(new THREE.CylinderGeometry(.05, .055, .4, 8).rotateX(Math.PI / 2), '#2f4f8f', g, 0, -.01, .25);
+  mesh(new THREE.CylinderGeometry(.052, .052, .03, 8).rotateX(Math.PI / 2), '#f5f5f5', g, 0, -.01, .06);
+  room.add(g); return g;
+}
+const hands = { L: makeHand(-1), R: makeHand(1) };
+const HAND_REST = { L: new THREE.Vector3(-.36, .79, 3.17), R: new THREE.Vector3(.36, .79, 3.17) };
+const MOUTH = new THREE.Vector3(0, 1.08, 3.42);
+const handAnim = { t: 1, from: new THREE.Vector3(), food: new THREE.Vector3() };
+
+/* 选中光圈 */
+const ring = mesh(new THREE.RingGeometry(.115, .135, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffc83d', transparent: true, opacity: .9 }), room, 0, DESK_Y + .002, SLOT_Z);
+
+/* 粒子：咬碎屑 / 吐出来 / 彩纸 */
+const particles = [];
+const pGeo = new THREE.BoxGeometry(.018, .018, .018);
+function burst(pos, color, n, speed = 1.2, life = .8, spread = 1) {
+  for (let i = 0; i < n; i++) {
+    const m = mesh(pGeo, color, room, pos.x, pos.y, pos.z);
+    particles.push({ m, v: new THREE.Vector3(rand(-1, 1) * spread, rand(.2, 1), rand(-1, .4) * spread).multiplyScalar(speed), life, max: life });
+  }
+}
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.life -= dt; p.v.y -= 4.5 * dt; p.m.position.addScaledVector(p.v, dt); p.m.rotation.x += dt * 8;
+    if (p.m.position.y < DESK_Y + .01 && Math.abs(p.m.position.x) < .6 && Math.abs(p.m.position.z - PLAYER_Z) < .3) { p.m.position.y = DESK_Y + .01; p.v.set(0, 0, 0); }
+    if (p.life <= 0) { room.remove(p.m); particles.splice(i, 1); }
+  }
+}
+
+/* ============================================================ HUD / DOM */
+const labelsEl = $('#labels');
+const labelEls = SLOT_X.map(() => { const d = document.createElement('div'); d.className = 'flabel'; labelsEl.appendChild(d); return d; });
+const seqPanel = $('#seqPanel');
+let toastTimer;
+function toast(msg, ms = 1300) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms); }
+const v3 = new THREE.Vector3();
+function toScreen(p) { v3.copy(p).project(camera); return { x: (v3.x + 1) / 2 * innerWidth, y: (1 - v3.y) / 2 * innerHeight, behind: v3.z > 1 }; }
+function floatText(pos, txt, cls = '') { const s = toScreen(pos); const d = document.createElement('div'); d.className = 'float ' + cls; d.textContent = txt; d.style.left = s.x + 'px'; d.style.top = s.y + 'px'; document.body.appendChild(d); setTimeout(() => d.remove(), 1000); }
+function keysHTML(seq, prog, cls = '') { return seq.map((k, i) => `<i class="key ${i < prog ? 'done' : i === prog ? 'cur' : ''}">${k}</i>`).join(''); }
+function fmt(s) { s = Math.max(0, Math.ceil(s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+
+/* ============================================================ 游戏状态 */
+let G = null;
+let paused = false;
+const camState = { mode: 'seat', shake: 0, bob: 0, t: 0 };
+function newSeq(len) { return Array.from({ length: len }, () => 'WASD'[Math.floor(Math.random() * 4)]); }
+function placeFood(i, type) {
+  const def = FOODS[type]; const f = makeFood(type);
+  f.root.position.set(SLOT_X[i], DESK_Y, SLOT_Z); f.root.rotation.y = rand(-.3, .3); f.root.scale.setScalar(.01); room.add(f.root);
+  f.root.traverse(o => o.userData.slot = i);
+  G.slots[i] = { type, def, seq: newSeq(def.len), prog: 0, ...f, state: 'ready', pop: 0, dirty: true };
+}
+function clearSlots() { if (G) G.slots.forEach(s => s && s.root && room.remove(s.root)); }
+
+function startLevel(li) {
+  ensureAudio(); clearSlots();
+  const lv = LEVELS[li];
+  G = { li, lv, state: 'intro', introT: 3.2, timeLeft: lv.time, score: 0, wrong: 0, near: 0, eaten: 0, sel: 0, lockT: 0, slots: SLOT_X.map(() => null), endT: 0,
+        total: lv.items.length, bag: [...lv.items].sort(() => Math.random() - .5), respawn: SLOT_X.map(() => 0) };
+  SLOT_X.forEach((x, i) => { if (G.bag.length) placeFood(i, G.bag.pop()); });
+  spawnStudents(); resetBoard(lv);
+  Object.assign(T, { state: 'board', t: rand(...lv.turnEvery) + 1.5, rot: Math.PI, hinted: false, nearCounted: false, fake: false, uiMode: null });
+  T.hintAt = rand(.6, 1.4);
+  teacher.mark.visible = false; teacher.brows.forEach(b => b.rotation.z = 0); teacher.mouth.rotation.z = Math.PI; teacher.mouth.position.y = .135;
+  camState.mode = 'seat'; camera.position.copy(CAM_POS); camera.lookAt(CAM_LOOK);
+  $('#panel').classList.add('hidden'); $('#hud').style.display = 'flex'; seqPanel.style.display = 'block';
+  $('#bubble').style.display = 'none'; $('#lock').style.display = 'none';
+  $('#hTarget').textContent = G.total; $('#alert').style.display = 'none';
+  $('#hLvl').textContent = `Class ${li + 1}`; $('#hSubj').textContent = lv.subj;
+  showBig(`Class ${li + 1} · ${lv.subj}<small>Eat all ${G.total} snacks in ${lv.time} seconds!</small>`);
+  paused = false;
+}
+function showBig(html) { const b = $('#big'); b.innerHTML = html; b.style.display = html ? 'flex' : 'none'; }
+
+/* 输入 */
+function onAction(code) {
+  if (!G || paused) return;
+  if (G.state === 'intro') return;
+  if (G.state !== 'playing') return;
+  if (teacherWatching()) { caught(); return; }
+  if (T.state === 'warning' && !T.nearCounted) { T.nearCounted = true; G.near++; toast('Close call! The teacher is turning…', 900); }
+  if (G.lockT > 0) { sfx.deny(); return; }
+  if (code === 'ArrowLeft') code = 'KeyQ'; else if (code === 'ArrowRight') code = 'KeyE';
+  const cur = G.slots[G.sel];
+  if (code === 'KeyQ' || code === 'KeyE' || code.startsWith('Slot')) {
+    const n = SLOT_X.length; let target = G.sel;
+    if (code.startsWith('Slot')) target = +code.slice(4);
+    else for (let k = 1; k < n; k++) { const j = (G.sel + (code === 'KeyQ' ? n - k : k)) % n; if (G.slots[j] && G.slots[j].state === 'ready') { target = j; break; } }
+    if (target === G.sel) return;
+    if (cur && cur.state === 'ready' && cur.prog > 0) { sfx.deny(); toast('Already eating! Finish it or spit it out first'); seqPanel.classList.remove('shake'); void seqPanel.offsetWidth; seqPanel.classList.add('shake'); return; }
+    G.sel = target; sfx.select(); G.slots.forEach(s => s && (s.dirty = true)); return;
+  }
+  const letter = { KeyW: 'W', KeyA: 'A', KeyS: 'S', KeyD: 'D' }[code];
+  if (!letter || !cur || cur.state !== 'ready') return;
+  if (letter === cur.seq[cur.prog]) {
+    cur.prog++; cur.dirty = true; cur.setP(cur.prog / cur.seq.length);
+    sfx.bite(); camState.bob = 1;
+    handAnim.t = 0; handAnim.food.set(SLOT_X[G.sel], DESK_Y + .1, SLOT_Z);
+    burst(new THREE.Vector3(SLOT_X[G.sel], DESK_Y + .1, SLOT_Z), cur.def.color, 4, .5, .5);
+    if (cur.prog === cur.seq.length) finishFood(G.sel);
+  } else spit(cur);
+}
+function finishFood(i) {
+  const s = G.slots[i]; s.state = 'gone'; s.pop = 0;
+  G.score += s.def.pts; G.eaten++; sfx.done();
+  floatText(new THREE.Vector3(SLOT_X[i], DESK_Y + .3, SLOT_Z), `+${s.def.pts}`);
+  const remaining = G.total - G.eaten;
+  if (!remaining) { setTimeout(() => G && G.state === 'playing' && win(), 400); return; }
+  if (G.bag.length) G.respawn[i] = .8;
+  else {
+    const left = SLOT_X.map((x, j) => j).filter(j => G.slots[j] && G.slots[j].state === 'ready');
+    if (left.length) { G.sel = left.sort((a, b) => Math.abs(a - i) - Math.abs(b - i))[0]; G.slots.forEach(x => x && (x.dirty = true)); }
+  }
+  toast(`Yum! ${remaining} to go`, 900);
+}
+function spit(s) {
+  G.wrong++; s.prog = 0; s.dirty = true; s.setP(0);
+  G.lockT = SPIT_LOCK; sfx.spit(); camState.shake = .5;
+  burst(MOUTH.clone().add(new THREE.Vector3(0, -.05, -.1)), s.def.color, 26, 1.6, 1.4, .6);
+  burst(MOUTH.clone().add(new THREE.Vector3(0, -.05, -.1)), '#d7f08a', 10, 1.3, 1.2, .6);
+  floatText(new THREE.Vector3(0, 1.0, 2.9), 'Pfft! Progress lost', 'bad');
+  $('#lock').style.display = 'block';
+}
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  ensureAudio();
+  if (e.code === 'Escape' || (e.code === 'KeyP' && (!G || G.state !== 'playing' || !teacherWatching()))) { if (G && (G.state === 'playing' || G.state === 'intro')) togglePause(); return; }
+  if (paused) return;
+  if ($('#panel').classList.contains('hidden') === false) {
+    if (e.code === 'Enter' || e.code === 'Space') { const b = $('#panel [data-primary]'); b && b.click(); }
+    if (e.code === 'KeyR' && G) { const b = $('#panel [data-act="retry"]'); b && b.click(); }
+    return;
+  }
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (G && G.state === 'playing') onAction(e.code);
+});
+const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+canvas.addEventListener('pointerdown', e => {
+  ensureAudio();
+  if (!G || G.state !== 'playing' || paused) return;
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(G.slots.filter(s => s && s.root).map(s => s.root), true);
+  if (hits.length && hits[0].object.userData.slot !== undefined) onAction('Slot' + hits[0].object.userData.slot);
+});
+$('#touch').addEventListener('pointerdown', e => { const k = e.target.dataset.k; if (k) { e.preventDefault(); ensureAudio(); onAction(k); } });
+if (matchMedia('(pointer:coarse)').matches) $('#touch').style.display = 'grid';
+addEventListener('blur', () => { if (G && (G.state === 'playing') && !paused) togglePause(); });
+
+/* ============================================================ 结局判定 */
+function caught() {
+  G.state = 'caught'; camState.mode = 'caught'; camState.t = 0;
+  T.state = 'caught'; teacher.mark.visible = true; sfx.caught(); showBig('');
+  teacher.brows[0].rotation.z = -.5; teacher.brows[1].rotation.z = .5; teacher.mouth.rotation.z = 0; teacher.mouth.position.y = .11;
+  $('#lock').style.display = 'none'; seqPanel.style.display = 'none'; $('#vignette').style.opacity = 1; $('#alert').style.display = 'none'; teacher.look.visible = false;
+  const f = $('#flash'); f.style.transition = 'none'; f.style.opacity = .9; requestAnimationFrame(() => { f.style.transition = 'opacity .6s'; f.style.opacity = 0; });
+  students.forEach(s => { s.nervous = 3; });
+  setTimeout(() => {
+    const b = $('#bubble'); b.innerHTML = pick(['You, fifth row! What are you chewing?!', 'Stand up! Is that… fried chicken?', 'I saw that. Breakfast is at home, not in my class!']); b.style.display = 'block';
+  }, 700);
+  setTimeout(() => showResult('caught'), 2600);
+}
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function bell() {
+  G.state = 'bell'; G.endT = 0; sfx.bell(); $('#lock').style.display = 'none'; G.lockT = 0;
+  $('#alert').style.display = 'none';
+  showBig('🔔 Ding-dong!<small>The bell rang!</small>');
+  setTimeout(() => { showBig(''); showResult('short'); }, 2600);
+}
+function starsFor(timeLeft, time) { const r = timeLeft / time; return r >= .4 ? 3 : r >= .2 ? 2 : 1; }
+function showResult(kind) {
+  if (!G) return;
+  G.state = kind === 'win' ? 'ending' : 'result'; $('#bubble').style.display = 'none'; seqPanel.style.display = 'none'; $('#alert').style.display = 'none';
+  const lv = G.lv, n = G.total, li = G.li; let html;
+  const stats = `<table class="res"><tr><td>Snacks eaten</td><td>${G.eaten} / ${n}</td></tr><tr><td>Points</td><td>${G.score}</td></tr><tr><td>Time left</td><td>${Math.ceil(G.timeLeft)} s</td></tr><tr><td>Spits</td><td>${G.wrong}</td></tr><tr><td>Close calls</td><td>${G.near}</td></tr></table>`;
+  if (kind === 'win') {
+    const st = starsFor(G.timeLeft, lv.time); sfx.win();
+    save.stars[li] = Math.max(save.stars[li] || 0, st); save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, li + 2)); store.set(save);
+    const last = li === LEVELS.length - 1;
+    html = `<h2>Desk cleared! 🎉</h2><div class="sub">You ate everything before the bell — the whole class is staring at you.</div><div class="stars">${'<b>★</b>'.repeat(st)}${'★'.repeat(3 - st)}</div>${stats}
+      <div class="hint">2 stars: ${Math.ceil(lv.time * .2)}+ s left · 3 stars: ${Math.ceil(lv.time * .4)}+ s left</div><br>
+      ${last ? '<button data-act="ending" data-primary>See the ending ▶</button>' : '<button data-act="next" data-primary>Next class ▶</button>'}
+      <button class="ghost" data-act="retry">Replay (R)</button><button class="ghost" data-act="menu">Menu</button>`;
+  } else if (kind === 'short') {
+    sfx.lose();
+    html = `<h2>Class is over… 😵</h2><div class="sub">You still had <b style="color:var(--bad);font-size:22px">${n - G.eaten}</b> snack${n - G.eaten === 1 ? '' : 's'} left on your desk.</div>${stats}
+      <button data-act="retry" data-primary>Try again (R)</button><button class="ghost" data-act="menu">Menu</button>`;
+  } else {
+    html = `<h2>Busted by the teacher! 😱</h2><div class="sub">Pressing ANY key while the teacher is facing the class gives you away.<br>Freeze when the chalk stops and the ❓ appears — but watch out for fake-outs!</div>${stats}
+      <button data-act="retry" data-primary>Retry (R)</button><button class="ghost" data-act="menu">Menu</button>`;
+  }
+  openPanel(html);
+}
+function showEnding() {
+  const stars = save.stars.reduce((a, b) => a + b, 0);
+  openPanel(`<h2>🏆 Legendary Breakfast Champion</h2><div class="sub">Five classes. A whole convenience store of snacks. Not caught once.<br>Your classmates don't know whether to cheer or call the principal.</div>
+    <div class="stars"><b>★</b> × ${stars} / 15</div>
+    <div class="hint">Teacher: "…Why does this classroom smell like yakisoba bread?"</div><br><button data-act="menu" data-primary>Back to menu</button>`);
+}
+function win() {
+  showResult('win'); startCelebration();
+}
+function openPanel(html) { const p = $('#panel'); p.innerHTML = `<div class="card">${html}</div>`; p.classList.remove('hidden'); }
+$('#panel').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; ensureAudio();
+  const act = b.dataset.act;
+  if (act === 'start') startLevel(+b.dataset.lv);
+  else if (act === 'retry') startLevel(G.li);
+  else if (act === 'next') startLevel(G.li + 1);
+  else if (act === 'ending') showEnding();
+  else if (act === 'menu') showMenu();
+  else if (act === 'resume') togglePause();
+});
+function togglePause() {
+  paused = !paused;
+  if (paused) openPanel(`<h2>Paused</h2><div class="sub">The teacher is still writing on the board…</div><button data-act="resume" data-primary>Resume</button><button class="ghost" data-act="retry">Restart</button><button class="ghost" data-act="menu">Menu</button>`);
+  else $('#panel').classList.add('hidden');
+}
+function showMenu() {
+  if (G) { clearSlots(); G = null; }
+  paused = false; $('#hud').style.display = 'none'; seqPanel.style.display = 'none'; $('#lock').style.display = 'none'; $('#bubble').style.display = 'none'; showBig('');
+  camState.mode = 'menu'; teacher.mark.visible = false;
+  const lvBtns = LEVELS.map((l, i) => `<button ${i + 1 > save.unlocked ? 'disabled' : ''} data-act="start" data-lv="${i}" ${i === save.unlocked - 1 ? 'data-primary' : ''}>${i + 1}. ${l.subj}<span class="st">${'★'.repeat(save.stars[i] || 0)}</span></button>`).join('');
+  openPanel(`<h1>Snack Before the Bell</h1><div class="sub">You skipped breakfast. Clear your desk before the bell rings, and don't get caught!</div>
+    <div class="rules">
+      🍙 Switch snacks with <span class="key">←</span> <span class="key">→</span>, <span class="key">Q</span> <span class="key">E</span>, or a mouse click.<br>
+      ⌨️ Type the <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> sequence above a snack. The first correct key locks you onto it.<br>
+      🤢 Wrong key = you spit it out: progress resets and you're stuck for a moment.<br>
+      👀 When the teacher faces the class, <b>ANY key</b> gets you caught. Warning signs: the chalk stops, footsteps, he glances over his shoulder, and a ❓ appears. Later classes have <b>fake-outs</b>!<br>
+      🎒 Eat every snack (refills come from your bag) before the bell. Finish faster for more stars.<br>
+      <small>Bun 4 · Energy Jelly 5 · Onigiri 6 · Sandwich 8 · Noodle Hot Dog 9 · Fried Chicken 10 · Bubble Tea 12 keys　|　Esc to pause</small>
+    </div>
+    <div class="levels">${lvBtns}</div>
+    <div class="hint">Best with headphones: when the chalk scratching stops, the teacher may be about to turn.</div>`);
+}
+function startCelebration() {
+  G.endT = 0; $('#hud').style.display = 'none';
+  const em = ['🤩', '😱', '👏', '😮', '🙇', '🤯', '😍'];
+  students.forEach(s => { s.head.remove(s.emo); const sp = emojiSprite(pick(em), .35); sp.position.set(0, .45, 0); s.head.add(sp); s.emo = sp; });
+  T.state = 'ending'; sfx.gasp();
+  let n = 0; const conf = setInterval(() => { if (!G || G.state !== 'ending' || n++ > 30) return clearInterval(conf); burst(new THREE.Vector3(rand(-3, 3), 3, rand(-3, 2)), pick(['#ff7a3d', '#ffc83d', '#3fbf6a', '#4aa3ff', '#ff6fa0']), 6, 1, 2.5, 1); }, 120);
+}
+
+/* ============================================================ 主循环 */
+let lastT = performance.now(), elapsed = 0;
+const tmpV = new THREE.Vector3();
+function update(dt) {
+  elapsed += dt;
+  const st = G ? G.state : 'menu';
+  if (G && st === 'intro') {
+    const prev = Math.ceil(G.introT); G.introT -= dt; const c = Math.ceil(G.introT);
+    if (G.introT < 1.2 && prev !== c) { showBig('Class begins!<small>Eat while the teacher writes on the board</small>'); sfx.tick(); }
+    if (G.introT <= 0) { G.state = 'playing'; showBig(''); }
+  }
+  if (G && st === 'playing') {
+    G.timeLeft -= dt;
+    if (G.lockT > 0) { G.lockT -= dt; if (G.lockT <= 0) { G.lockT = 0; $('#lock').style.display = 'none'; } }
+    if (G.timeLeft <= 0) { G.timeLeft = 0; bell(); }
+  }
+  updateTeacher(dt);
+  updateStudents(dt, elapsed);
+  updateFoods(dt);
+  updateHands(dt);
+  updateParticles(dt);
+  updateCamera(dt);
+  updateClock();
+  updateHUD();
+}
+function updateTeacher(dt) {
+  const tg = teacher; const playing = G && G.state === 'playing';
+  const writing = T.state === 'board';
+  if (T.state === 'board') {
+    if (playing) {
+      T.t -= dt;
+      if (!T.hinted && T.t < T.hintAt) { T.hinted = true; if (Math.random() < .6) nervousGlance(); }
+      if (T.t <= 0) { T.state = 'warning'; T.t = G.lv.warn; T.fake = Math.random() < (G.lv.fake || 0); sfx.step(); sfx.step(.25); sfx.warnBeep(); if (Math.random() < .5) sfx.ahem(); }
+    }
+    if (Math.random() < dt * .08 && playing) nervousGlance(); // 偶尔的虚惊
+  } else if (T.state === 'warning') {
+    T.t -= dt;
+    if (T.t <= 0) {
+      if (T.fake) { T.state = 'fakeout'; T.t = .6; toast('…false alarm! He went back to writing', 1100); }
+      else { T.state = 'turning'; T.t = .22; sfx.turn(); camState.shake = .25; }
+    }
+  } else if (T.state === 'fakeout') {
+    T.t -= dt; if (T.t <= 0) { T.state = 'board'; T.t = rand(...G.lv.turnEvery) * .6; T.hinted = false; T.nearCounted = false; T.hintAt = rand(.6, 1.4); }
+  } else if (T.state === 'turning') {
+    T.t -= dt; if (T.t <= 0) { T.state = 'watching'; T.t = rand(...G.lv.watch); }
+  } else if (T.state === 'watching') {
+    T.t -= dt; if (T.t <= 0) { T.state = 'back'; T.t = .35; }
+  } else if (T.state === 'back') {
+    T.t -= dt; if (T.t <= 0) { T.state = 'board'; T.t = rand(...G.lv.turnEvery); T.hinted = false; T.nearCounted = false; T.hintAt = rand(.6, 1.4); }
+  }
+  // 朝向：π = 面向黑板，0 = 面向学生
+  const facing = ['turning', 'watching', 'caught', 'ending'].includes(T.state) || (G && G.state === 'bell');
+  const goal = facing ? 0 : T.state === 'warning' ? Math.PI - .6 : Math.PI;
+  const k = T.state === 'turning' ? 22 : T.state === 'back' ? 12 : T.state === 'warning' ? 9 : 6;
+  T.rot = damp(T.rot, goal, k, dt); tg.g.rotation.y = T.rot;
+  tg.g.scale.setScalar(damp(tg.g.scale.x, (facing && T.state !== 'ending' ? 1.15 : 1) * TS, 8, dt));
+  tg.g.position.z = damp(tg.g.position.z, RZF + (facing ? 1.25 : .8), 6, dt);
+  // 写字手臂
+  const armR = tg.arms[1], armL = tg.arms[0];
+  if (writing && G && G.state !== 'menu') {
+    armR.rotation.x = damp(armR.rotation.x, -2.1 + Math.sin(elapsed * 7) * .15, 10, dt); armR.rotation.z = Math.sin(elapsed * 3.3) * .25;
+    T.chalkT -= dt; if (T.chalkT <= 0) { T.chalkT = rand(.08, .22); if (G.state === 'playing' || G.state === 'intro') { sfx.chalk(); chalkStroke(); } }
+    tg.head.rotation.y = damp(tg.head.rotation.y, Math.sin(elapsed * .7) * .15, 3, dt);
+  } else if (T.state === 'warning') {
+    armR.rotation.x = damp(armR.rotation.x, -.5, 9, dt); armR.rotation.z = damp(armR.rotation.z, 0, 9, dt); tg.head.rotation.y = damp(tg.head.rotation.y, 1.1, 9, dt);
+  } else if (T.state === 'fakeout') {
+    armR.rotation.x = damp(armR.rotation.x, -2.0, 8, dt); tg.head.rotation.y = damp(tg.head.rotation.y, 0, 8, dt);
+  } else if (T.state === 'caught') {
+    armR.rotation.x = damp(armR.rotation.x, -1.55, 10, dt); armR.rotation.z = 0; tg.head.rotation.y = damp(tg.head.rotation.y, 0, 8, dt);
+  } else if (facing) {
+    armR.rotation.x = damp(armR.rotation.x, -.3, 8, dt); armR.rotation.z = damp(armR.rotation.z, .3, 8, dt);
+    armL.rotation.z = damp(armL.rotation.z, -.3, 8, dt);
+    tg.head.rotation.y = T.state === 'watching' ? Math.sin(elapsed * 2.2) * .35 : damp(tg.head.rotation.y, 0, 6, dt);
+  } else { armR.rotation.x = damp(armR.rotation.x, 0, 6, dt); }
+  if (!facing) armL.rotation.z = damp(armL.rotation.z, 0, 6, dt);
+  const looking = G && (teacherWatching() || T.state === 'caught'), warnOn = G && G.state === 'playing' && T.state === 'warning';
+  const vg = $('#vignette'); vg.style.opacity = looking ? 1 : 0; vg.classList.toggle('look', !!looking && T.state !== 'caught');
+  tg.qmark.visible = !!warnOn; tg.look.visible = !!(G && G.state === 'playing' && teacherWatching());
+  if (tg.qmark.visible) tg.qmark.scale.setScalar(.4 + Math.sin(elapsed * 25) * .06);
+  if (tg.look.visible) tg.look.scale.setScalar(.5 + Math.sin(elapsed * 14) * .08);
+  const mode = !G || G.state !== 'playing' ? '' : teacherWatching() ? 'look' : warnOn ? 'warn' : '';
+  if (T.uiMode !== mode) {
+    T.uiMode = mode; const box = $('#teacherBox'), al = $('#alert');
+    box.className = mode; $('#tStat').textContent = mode === 'look' ? '👀 LOOKING!' : mode === 'warn' ? '⚠️ Turning…' : '✍️ Writing';
+    al.className = mode; al.style.display = mode ? 'block' : 'none';
+    al.firstElementChild.innerHTML = mode === 'look' ? '👀 FREEZE!<small>The teacher is watching the class</small>' : mode === 'warn' ? '⚠️ The teacher is about to turn!' : '';
+  }
+}
+function updateFoods(dt) {
+  if (!G) return;
+  G.slots.forEach((s, i) => {
+    if (!s) return;
+    if (s.state === 'ready') { s.pop = Math.min(1, s.pop + dt * 4); const k = s.pop < 1 ? 1 + Math.sin(s.pop * Math.PI) * .25 : 1; s.root.scale.setScalar(Math.max(.01, ease(s.pop) * k)); }
+    else if (s.state === 'gone') { s.pop = Math.min(1, s.pop + dt * 5); s.root.scale.setScalar(Math.max(.01, 1 - s.pop)); if (s.pop >= 1) { room.remove(s.root); s.state = 'empty'; s.dirty = true; } }
+  });
+  if (G.state === 'playing') G.respawn.forEach((r, i) => {
+    if (r > 0) { G.respawn[i] -= dt; if (G.respawn[i] <= 0 && G.bag.length) { if (G.slots[i] && G.slots[i].root) room.remove(G.slots[i].root); placeFood(i, G.bag.pop()); } }
+  });
+  const sel = G.slots[G.sel];
+  ring.visible = G.state === 'playing' || G.state === 'intro';
+  ring.position.x = damp(ring.position.x, SLOT_X[G.sel], 18, dt);
+  ring.material.color.set(sel && sel.prog > 0 ? '#ff7a3d' : '#ffc83d'); ring.material.opacity = .6 + Math.sin(elapsed * 6) * .3;
+}
+function updateHands(dt) {
+  handAnim.t = Math.min(1, handAnim.t + dt / .26);
+  const r = hands.R, l = hands.L, rest = HAND_REST.R;
+  if (handAnim.t < 1) {
+    const t = handAnim.t;
+    if (t < .4) tmpV.lerpVectors(rest, handAnim.food, ease(t / .4)); else tmpV.lerpVectors(handAnim.food, MOUTH, ease((t - .4) / .6));
+    r.position.lerp(tmpV, .6); r.rotation.x = -t * .6;
+  } else { r.position.lerp(rest, 1 - Math.exp(-10 * dt)); r.rotation.x = damp(r.rotation.x, 0, 10, dt); }
+  l.position.copy(HAND_REST.L); l.position.y += Math.sin(elapsed * 2) * .003;
+  const hide = !G || G.state === 'ending'; r.visible = l.visible = !hide;
+}
+const camLook = CAM_LOOK.clone();
+function updateCamera(dt) {
+  const pos = tmpV.copy(CAM_POS);
+  let look = CAM_LOOK;
+  if (camState.mode === 'caught') {
+    camState.t = Math.min(1, camState.t + dt * 1.6);
+    const head = new THREE.Vector3(); teacher.head.getWorldPosition(head); head.y += .42;
+    const close = head.clone().add(new THREE.Vector3(0, -.1, 2.7));
+    pos.lerpVectors(CAM_POS, close, ease(camState.t)); look = head;
+    camLook.lerp(look, 1 - Math.exp(-6 * dt));
+    if (camState.t > .5) { const s = toScreen(head.clone().add(new THREE.Vector3(0, .62, 0))); const b = $('#bubble'); b.style.left = s.x + 'px'; b.style.top = s.y + 'px'; }
+  } else if (camState.mode === 'menu') {
+    pos.set(Math.sin(elapsed * .15) * 1.5, 2.2, 4.5); camLook.lerp(new THREE.Vector3(0, 1.2, -3), .05); look = null;
+  } else if (G && G.state === 'ending') {
+    G.endT += dt; pos.set(0, 1.25 + Math.min(G.endT, 1) * .5, CAM_POS.z + Math.min(G.endT, 1) * .6); camLook.lerp(new THREE.Vector3(0, 1.1, -2), .05); look = null;
+  } else camLook.lerp(look, 1 - Math.exp(-8 * dt));
+  camState.bob = Math.max(0, camState.bob - dt * 6); camState.shake = Math.max(0, camState.shake - dt);
+  pos.y -= Math.sin(camState.bob * Math.PI) * .012;
+  if (camState.shake > 0) pos.add(new THREE.Vector3(rand(-1, 1), rand(-1, 1), 0).multiplyScalar(camState.shake * .03));
+  camera.position.lerp(pos, camState.mode === 'menu' ? .05 : 1); camera.lookAt(camLook);
+}
+function updateClock() {
+  const frac = G ? G.timeLeft / G.lv.time : .5; // 1 → 9:15，0 → 10:00
+  const minutes = 60 - frac * 45; hMin.rotation.z = -minutes / 60 * Math.PI * 2;
+  hHour.rotation.z = -((9 + minutes / 60) / 12) * Math.PI * 2; hSec.rotation.z = -Math.floor(elapsed) / 60 * Math.PI * 2;
+}
+function updateHUD() {
+  if (!G) { labelEls.forEach(l => l.style.display = 'none'); return; }
+  const live = G.state === 'playing' || G.state === 'intro';
+  $('#hudTime').textContent = fmt(G.timeLeft); $('#hudTime').classList.toggle('hurry', G.timeLeft <= 10);
+  $('#hScore').textContent = G.eaten; $('#hBag').textContent = G.bag.length; $('#hPts').textContent = G.score; $('#hWrong').textContent = G.wrong; $('#hNear').textContent = G.near;
+  const bar = $('#bar i'); bar.style.width = (G.eaten / G.total * 100) + '%'; bar.classList.toggle('full', G.eaten === G.total);
+  G.slots.forEach((s, i) => {
+    const el = labelEls[i]; el.style.display = live ? 'block' : 'none'; if (!live) return;
+    const p = toScreen(new THREE.Vector3(SLOT_X[i], DESK_Y + .27, SLOT_Z));
+    el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%,-100%)`;
+    const empty = !s || s.state !== 'ready';
+    const cls = 'flabel' + (i === G.sel ? ' sel' : '') + (s && s.prog > 0 ? ' locked' : '') + (empty ? ' empty' : '');
+    if (el.className !== cls) el.className = cls;
+    if (s && s.dirty) { el.innerHTML = `<div class="h">${s.prog > 0 ? '🔒' : ''}${s.def.name}<span>+${s.def.pts}</span></div><div class="s">${keysHTML(s.seq, s.prog)}</div>`; s.dirty = false; G.panelDirty = true; }
+  });
+  const cur = G.slots[G.sel];
+  const key = G.lockT > 0 ? 'spit' : cur ? `${G.sel}|${cur.type}|${cur.prog}|${cur.state}` : 'none';
+  if (seqPanel.dataset.k !== key) {
+    seqPanel.dataset.k = key;
+    seqPanel.innerHTML = G.lockT > 0 ? `<div class="t">🤢 Spitting it out… hold on</div><div class="spit"><i></i></div>` : cur && cur.state === 'ready'
+      ? `<div class="t"><b>${cur.def.name} +${cur.def.pts}</b>　${cur.prog > 0 ? `Locked ${cur.prog}/${cur.seq.length}` : '← → / Q E to switch · first correct key locks it'}</div><div class="row">${keysHTML(cur.seq, cur.prog)}</div>`
+      : `<div class="t">${G.bag.length ? 'Grabbing the next snack from your bag…' : 'Pick a snack with ← / →'}</div>`;
+  }
+  if (G.lockT > 0) { const b = seqPanel.querySelector('.spit i'); if (b) b.style.width = (G.lockT / SPIT_LOCK * 100) + '%'; }
+}
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 1 ? 78 : camera.aspect < 1.4 ? 62 : 55; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+function frame(now) {
+  const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
+  if (!paused) update(dt);
+  renderer.render(scene, camera); requestAnimationFrame(frame);
+}
+resetBoard(LEVELS[0]); spawnStudents(); showMenu();
+requestAnimationFrame(frame);
+window.__game = { get G() { return G; }, T, startLevel, onAction };
+</script>
+</body>
+</html>
